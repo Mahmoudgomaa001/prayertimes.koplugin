@@ -2,7 +2,7 @@
 
 **English** | [**العربية**](docs/README.ar.md)
 
-**Repository:** [github.com/Mahmoudgomaa001/koreader.prayertimes](https://github.com/Mahmoudgomaa001/koreader.prayertimes)
+**Repository:** [github.com/Mahmoudgomaa001/prayertimes.koplugin](https://github.com/Mahmoudgomaa001/prayertimes.koplugin)
 
 A comprehensive Islamic prayer times plugin for KOReader, supporting multiple calculation methods, Hijri calendar, fasting reminders, custom fonts, and a bilingual Arabic/English interface.
 
@@ -72,4 +72,4 @@ Pull requests are welcome. Please test on your device before submitting.
 
 ## Updates & Issues
 
-For the latest updates, bug reports, or feature requests, visit the [repository](https://github.com/Mahmoudgomaa001/koreader.prayertimes).
+For the latest updates, bug reports, or feature requests, visit the [repository](https://github.com/Mahmoudgomaa001/prayertimes.koplugin).
