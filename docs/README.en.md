@@ -1,6 +1,6 @@
 # Prayer Times for KOReader – User Guide (English)
 
-Version 1.0
+Version 1.0.1
 
 **Repository:** [github.com/Mahmoudgomaa001/koreader.prayertimes](https://github.com/Mahmoudgomaa001/koreader.prayertimes)
 
