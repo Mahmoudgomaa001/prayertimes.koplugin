@@ -92,12 +92,6 @@ local function getSuggestedMethod(country)
     return nil
 end
 
-local function getEffectiveUtcOffset(location)
-    local base = tonumber(location.timezone) or 0
-    local dst  = tonumber(location.dst) or 0
-    return base + dst
-end
-
 local PrayerTimes = WidgetContainer:extend{
     name = "prayertimes",
     config_file = "prayertimes_config.lua",
@@ -136,7 +130,7 @@ function PrayerTimes:initLuaSettings()
             location = {
                 name = "Alexandria", name_ar = "الإسكندرية",
                 latitude = 31.198, longitude = 29.9192,
-                timezone = 2, dst = S.dst,
+                timezone = 2, dst_offset = S.dst_offset,
             },
             calculation = {
                 method = S.method,
@@ -184,11 +178,7 @@ function PrayerTimes:ensureSettingsComplete()
     loc.latitude   = tonumber(loc.latitude)   or 31.198
     loc.longitude  = tonumber(loc.longitude)  or 29.9192
     loc.timezone   = tonumber(loc.timezone)   or 2
-    if loc.dst_offset ~= nil then
-        loc.dst = tonumber(loc.dst_offset) or 0
-        loc.dst_offset = nil
-    end
-    loc.dst = tonumber(loc.dst) or 0
+    loc.dst_offset = tonumber(loc.dst_offset) or 0
     self.settings.location = loc
 
     local calc = self.settings.calculation or {}
@@ -311,27 +301,27 @@ function PrayerTimes:getLocationSubmenu()
             sub_item_table = {
                 {
                     text = self:t("no_dst"),
-                    checked_func = function() return self.settings.location.dst == 0 end,
+                    checked_func = function() return self.settings.location.dst_offset == 0 end,
                     callback = function()
-                        self.settings.location.dst = 0; self:flushSettings() end,
+                        self.settings.location.dst_offset = 0; self:flushSettings() end,
                 },
                 {
                     text = self:t("add_1_hour"),
-                    checked_func = function() return self.settings.location.dst == 1 end,
+                    checked_func = function() return self.settings.location.dst_offset == 1 end,
                     callback = function()
-                        self.settings.location.dst = 1; self:flushSettings() end,
+                        self.settings.location.dst_offset = 1; self:flushSettings() end,
                 },
                 {
                     text = self:t("add_2_hours"),
-                    checked_func = function() return self.settings.location.dst == 2 end,
+                    checked_func = function() return self.settings.location.dst_offset == 2 end,
                     callback = function()
-                        self.settings.location.dst = 2; self:flushSettings() end,
+                        self.settings.location.dst_offset = 2; self:flushSettings() end,
                 },
                 {
                     text = self:t("subtract_1_hour"),
-                    checked_func = function() return self.settings.location.dst == -1 end,
+                    checked_func = function() return self.settings.location.dst_offset == -1 end,
                     callback = function()
-                        self.settings.location.dst = -1; self:flushSettings() end,
+                        self.settings.location.dst_offset = -1; self:flushSettings() end,
                 },
             },
         },
@@ -848,11 +838,12 @@ function PrayerTimes:showPrayerTimes()
         local now = os.time()
         local today = os.date("*t", now)
         local loc = self.settings.location
-        local utc_offset = getEffectiveUtcOffset(loc)
+        local dst = loc.dst_offset or 0
+        local tz  = (loc.timezone or 0) + dst
 
         local times = calculateTimes(
             today.year, today.month, today.day,
-            loc.latitude, loc.longitude, utc_offset,
+            loc.latitude, loc.longitude, tz,
             self.settings.calculation.method,
             self.settings.calculation.asr_madhhab)
 
@@ -917,11 +908,12 @@ function PrayerTimes:getNextPrayer(times, system_now)
         { key = "isha",    time = times.isha },
     }
 
-        h = (tonumber(h) or 0) - utc_offset
+    local today = os.date("*t", system_now)
+    local dst = self.settings.location.dst_offset or 0
 
     local function toSystemTime(hhmm, date_table)
         local h, m = hhmm:match("(%d+):(%d+)")
-        h = (tonumber(h) or 0) - utc_offset
+        h = (tonumber(h) or 0) - dst
         m = tonumber(m) or 0
         local midnight = os.time{
             year = date_table.year, month = date_table.month,
@@ -942,7 +934,7 @@ function PrayerTimes:getNextPrayer(times, system_now)
         tomorrow.year, tomorrow.month, tomorrow.day,
         self.settings.location.latitude,
         self.settings.location.longitude,
-        utc_offset,
+        (self.settings.location.timezone or 0) + dst,
         self.settings.calculation.method,
         self.settings.calculation.asr_madhhab)
 
@@ -1098,7 +1090,7 @@ function PrayerTimes:setLocation(name, name_ar, lat, lng, tz, country, silent)
         latitude   = lat,
         longitude  = lng,
         timezone   = tz,
-        dst = (self.settings.location and self.settings.location.dst) or 0,
+        dst_offset = (self.settings.location and self.settings.location.dst_offset) or 0,
     }
 
     if country then

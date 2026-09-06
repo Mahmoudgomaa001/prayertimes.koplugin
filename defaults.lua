@@ -1,6 +1,6 @@
 -- defaults.lua
 local DEFAULTS = {
-    version= "1.0.1",
+    version = "1.0.1",
     fonts = {
         title             = 30,
         clock             = 42,
@@ -48,7 +48,7 @@ local DEFAULTS = {
         fasting_reminder_days = 2,
         method                = "Egyptian",
         asr_madhhab           = "Shafi",
-        dst                   = 0,
+        dst_offset            = 0,
     },
     region_methods = {
         ["Egypt"]                = "Egyptian",
