@@ -93,9 +93,7 @@ local function getSuggestedMethod(country)
 end
 
 local function getEffectiveUtcOffset(location)
-    local base = tonumber(location.timezone) or 0
-    local dst  = tonumber(location.dst) or 0
-    return base + dst
+    return tonumber(location.dst) or 0
 end
 
 local PrayerTimes = WidgetContainer:extend{
@@ -848,11 +846,11 @@ function PrayerTimes:showPrayerTimes()
         local now = os.time()
         local today = os.date("*t", now)
         local loc = self.settings.location
-        local tz = getEffectiveUtcOffset(loc)
+        local utc_offset = getEffectiveUtcOffset(loc)
 
         local times = calculateTimes(
             today.year, today.month, today.day,
-            loc.latitude, loc.longitude, tz,
+            loc.latitude, loc.longitude, utc_offset,
             self.settings.calculation.method,
             self.settings.calculation.asr_madhhab)
 
@@ -1098,7 +1096,6 @@ function PrayerTimes:setLocation(name, name_ar, lat, lng, tz, country, silent)
         name_ar    = name_ar or name,
         latitude   = lat,
         longitude  = lng,
-        timezone   = tz,
         dst = (self.settings.location and self.settings.location.dst) or 0,
     }
 
