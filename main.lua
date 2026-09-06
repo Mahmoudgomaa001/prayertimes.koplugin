@@ -93,7 +93,9 @@ local function getSuggestedMethod(country)
 end
 
 local function getEffectiveUtcOffset(location)
-    return tonumber(location.dst) or 0
+    local base = tonumber(location.timezone) or 0
+    local dst  = tonumber(location.dst) or 0
+    return base + dst
 end
 
 local PrayerTimes = WidgetContainer:extend{
@@ -915,8 +917,7 @@ function PrayerTimes:getNextPrayer(times, system_now)
         { key = "isha",    time = times.isha },
     }
 
-    local today = os.date("*t", system_now)
-    local utc_offset = getEffectiveUtcOffset(self.settings.location)
+        h = (tonumber(h) or 0) - utc_offset
 
     local function toSystemTime(hhmm, date_table)
         local h, m = hhmm:match("(%d+):(%d+)")
@@ -1096,6 +1097,7 @@ function PrayerTimes:setLocation(name, name_ar, lat, lng, tz, country, silent)
         name_ar    = name_ar or name,
         latitude   = lat,
         longitude  = lng,
+        timezone   = tz,
         dst = (self.settings.location and self.settings.location.dst) or 0,
     }
 

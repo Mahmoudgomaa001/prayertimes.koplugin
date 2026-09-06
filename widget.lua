@@ -148,7 +148,7 @@ end
 
 function PrayerTimesWidget:getAdjustedNow()
     local loc = self.props.settings.location or {}
-    local utc_offset = loc.dst or 0
+    local utc_offset = (loc.timezone or 0) + (loc.dst or 0)
     return os.time() + utc_offset * 3600
 end
 
