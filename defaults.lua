@@ -1,6 +1,6 @@
 -- defaults.lua
 local DEFAULTS = {
-    version= "1.0",
+    version= "1.0.1",
     fonts = {
         title             = 30,
         clock             = 42,
