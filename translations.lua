@@ -156,7 +156,7 @@ local translations = {
         fasting_shawwal  = "Shawwal",
 
         about_text =
-            "Prayer Times\nVersion 15.2\n\n"
+            "Prayer Times\nVersion 1.0.1\n\n"
             .. "Accurate prayer time calculation\n"
             .. "Seven calculation methods\n"
             .. "Hijri calendar with manual adjustment\n"
@@ -321,7 +321,7 @@ local translations = {
         fasting_shawwal  = "شوال",
 
         about_text =
-            "مواقيت الصلاة\nالإصدار 15.2\n\n"
+            "مواقيت الصلاة\nالإصدار 1.0.1\n\n"
             .. "حساب دقيق لأوقات الصلاة\n"
             .. "سبع طرق للحساب\n"
             .. "تقويم هجري مع تعديل يدوي\n"
