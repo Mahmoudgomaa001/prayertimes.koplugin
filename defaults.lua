@@ -1,3 +1,4 @@
+-- defaults.lua
 local DEFAULTS = {
     version = "1.1.0",
     fonts = {
@@ -49,7 +50,8 @@ local DEFAULTS = {
         method                = "Egyptian",
         asr_madhhab           = "Shafi",
         dst_offset            = 0,
-        font_sizes = {             ["ar"] = {
+        font_sizes = {
+            ["ar"] = {
                 ["Alkhalil-Round Oplique Right.otf"] = 4,
                 ["Astrolabe.ttf"] = 8,
                 ["Caveat-Regular.ttf"] = 11,
@@ -105,6 +107,7 @@ local DEFAULTS = {
                 ["tfont"] = 5,
                 ["x_smallinfofont"] = 8,
             },
+        },
     },
     region_methods = {
         ["Egypt"]                = "Egyptian",
