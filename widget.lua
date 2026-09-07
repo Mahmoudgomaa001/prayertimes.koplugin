@@ -34,6 +34,10 @@ local Blitbuffer = utils.Blitbuffer
 local Screen = utils.Screen
 local UIManager = utils.UIManager
 local logger = utils.logger
+local InfoMessage = utils.InfoMessage
+
+local Button = require("ui/widget/button")
+local OverlapGroup = require("ui/widget/overlapgroup")
 
 local safeFace = utils.safeFace
 local getBatteryText = utils.getBatteryText
@@ -44,34 +48,70 @@ local interp = utils.interp
 local getActiveLayout = utils.getActiveLayout
 local makeFixedCell = utils.makeFixedCell
 
+local function getFontKey(display)
+    if display.custom_font_path and display.custom_font_path ~= "" then
+        return display.custom_font_path
+    else
+        return display.font_face or "infofont"
+    end
+end
+
+local function getSavedFontOffset(display, font_key, lang)
+    local fs = display.font_sizes and display.font_sizes[lang]
+    return tonumber(fs and fs[font_key]) or nil
+end
+
 local PrayerTimesWidget = InputContainer:extend{}
 
 function PrayerTimesWidget:init()
     self.covers_fullscreen = true
-    self.ges_events.TapClose = {
-        GestureRange:new{
-            ges = "tap",
-            range = Geom:new{ x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() },
-        },
-    }
-
     local disp = (self.props and self.props.settings and self.props.settings.display) or {}
-
-    self.lang    = disp.language or "en"
-    self.is_ar   = (self.lang == "ar")
+    self.lang = disp.language or "en"
+    self.is_ar = (self.lang == "ar")
     self.layout, self.is_mirrored = getActiveLayout(self.is_ar)
     self.time_format = disp.time_format or 24
-    self.font_offset = disp.font_size_offset or DEFAULTS.settings.font_size_offset
-    self.next_prayer_timestamp =
-        (self.props.next_prayer and self.props.next_prayer.timestamp) or nil
+    self.next_prayer_timestamp = (self.props.next_prayer and self.props.next_prayer.timestamp) or nil
 
-    utils.ensureFontsDirRegistered()
-    local custom = disp.custom_font_path
-    if type(custom) == "string" and custom ~= "" then
-        self.body_face = custom:match("([^/\\]+)$") or custom
-    end
-    if not self.body_face then
-        self.body_face = disp.font_face or DEFAULTS.default_face
+    self.is_preview = (self.props.preview_font ~= nil)
+    self.show_controls = self.is_preview  -- show overlay initially in preview
+
+    if self.is_preview then
+        self.body_face = self.props.preview_font
+        self.font_offset = self.props.preview_offset or 0
+        self.all_fonts = self.props.all_fonts or {}
+        self.current_font_index = self.props.current_index or 1
+
+        self.ges_events.Tap = {
+            GestureRange:new{
+                ges = "tap",
+                range = Geom:new{ x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() },
+            },
+        }
+        self.ges_events.Swipe = {
+            GestureRange:new{
+                ges = "swipe",
+                range = Geom:new{ x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() },
+                direction = "south",
+            },
+        }
+    else
+        self.ges_events.TapClose = {
+            GestureRange:new{
+                ges = "tap",
+                range = Geom:new{ x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() },
+            },
+        }
+        utils.ensureFontsDirRegistered()
+        local custom = disp.custom_font_path
+        if type(custom) == "string" and custom ~= "" then
+            self.body_face = custom:match("([^/\\]+)$") or custom
+        else
+            self.body_face = disp.font_face or DEFAULTS.default_face
+        end
+        local font_key = getFontKey(disp)
+        local saved = getSavedFontOffset(disp, font_key, self.lang)
+        local default_offset = DEFAULTS.settings["font_size_offset_"..self.lang] or 0
+        self.font_offset = saved or default_offset
     end
 
     local ok, err = pcall(function()
@@ -93,22 +133,47 @@ function PrayerTimesWidget:init()
         }
     end
 
-    pcall(function()
+    if not self.is_preview then
+        pcall(function()
+            UIManager:setDirty("all", "flashpartial")
+            self:setupScheduling()
+            self:applyWidgetBrightness()
+        end)
+    else
         UIManager:setDirty("all", "flashpartial")
-        self:setupScheduling()
-        self:applyWidgetBrightness()
-    end)
+    end
+end
+
+function PrayerTimesWidget:onTap()
+    if self.is_preview then
+        self.show_controls = not self.show_controls
+        self:refresh()
+        return true
+    end
+end
+
+function PrayerTimesWidget:onSwipe(arg, ges)
+    if self.is_preview and ges and ges.direction == "south" then
+        self:closePreview()
+        return true
+    end
 end
 
 function PrayerTimesWidget:onTapClose()
-    self.is_closing = true
-    pcall(function()
-        self:unscheduleTimers()
-        self:restoreWidgetBrightness()
-    end)
-    UIManager:close(self)
+    if self.is_preview then return end
+    self:closePreview()
 end
 PrayerTimesWidget.onAnyKeyPressed = PrayerTimesWidget.onTapClose
+
+function PrayerTimesWidget:closePreview()
+    self.is_closing = true
+    self:unscheduleTimers()
+    UIManager:close(self)
+    -- Force full refresh shortly after closing
+    UIManager:scheduleIn(0.1, function()
+        UIManager:setDirty("all", "full")
+    end)
+end
 
 function PrayerTimesWidget:unscheduleTimers()
     if self.refresh_timer then
@@ -148,10 +213,12 @@ end
 
 function PrayerTimesWidget:getAdjustedNow()
     local loc = self.props.settings.location or {}
-    return os.time() + (loc.dst_offset or 0) * 3600
+    local utc_offset = (loc.timezone or 0) + (loc.dst_offset or 0)
+    return os.time() + utc_offset * 3600
 end
 
 function PrayerTimesWidget:setupScheduling()
+    if self.is_preview then return end
     local mode = self.props.settings.display.clock_mode
 
     if mode == "live" then
@@ -213,6 +280,7 @@ function PrayerTimesWidget:triggerAlert()
 end
 
 function PrayerTimesWidget:applyWidgetBrightness()
+    if self.is_preview then return end
     local level = self.props.settings.widget_brightness
     if type(level) == "number" and level >= 0 then
         local ok, powerd = pcall(Device.getPowerDevice, Device)
@@ -227,6 +295,7 @@ function PrayerTimesWidget:applyWidgetBrightness()
 end
 
 function PrayerTimesWidget:restoreWidgetBrightness()
+    if self.is_preview then return end
     if self.original_brightness then
         local ok, powerd = pcall(Device.getPowerDevice, Device)
         if ok and powerd and powerd.setIntensity then
@@ -590,13 +659,173 @@ function PrayerTimesWidget:render()
         vgroup[#vgroup+1] = bottom_w
     end
 
-    self[1] = FrameContainer:new{
+    -- Build the main frame
+    local main_frame = FrameContainer:new{
         vgroup,
         width = screen_size.w,
         height = screen_size.h,
         background = Blitbuffer.COLOR_WHITE,
         padding = margin,
     }
+
+    if self.is_preview then
+        if self.show_controls then
+            local parent_widget = self
+
+            local btn_prev = Button:new{
+                text = "◀",
+                width = Screen:scaleBySize(60),
+                callback = function()
+                    if #parent_widget.all_fonts > 0 then
+                        parent_widget.current_font_index = parent_widget.current_font_index - 1
+                        if parent_widget.current_font_index < 1 then
+                            parent_widget.current_font_index = #parent_widget.all_fonts
+                        end
+                        local f = parent_widget.all_fonts[parent_widget.current_font_index]
+                        parent_widget.body_face = f.key
+                        local saved = getSavedFontOffset(parent_widget.props.settings.display, f.key, parent_widget.lang)
+                        parent_widget.font_offset = saved or DEFAULTS.settings["font_size_offset_"..parent_widget.lang]
+                        parent_widget:refresh()
+                    end
+                end,
+            }
+            local btn_next = Button:new{
+                text = "▶",
+                width = Screen:scaleBySize(60),
+                callback = function()
+                    if #parent_widget.all_fonts > 0 then
+                        parent_widget.current_font_index = parent_widget.current_font_index + 1
+                        if parent_widget.current_font_index > #parent_widget.all_fonts then
+                            parent_widget.current_font_index = 1
+                        end
+                        local f = parent_widget.all_fonts[parent_widget.current_font_index]
+                        parent_widget.body_face = f.key
+                        local saved = getSavedFontOffset(parent_widget.props.settings.display, f.key, parent_widget.lang)
+                        parent_widget.font_offset = saved or DEFAULTS.settings["font_size_offset_"..parent_widget.lang]
+                        parent_widget:refresh()
+                    end
+                end,
+            }
+            local btn_minus = Button:new{
+                text = "−",
+                width = Screen:scaleBySize(60),
+                callback = function()
+                    parent_widget.font_offset = parent_widget.font_offset - 1
+                    parent_widget:refresh()
+                end,
+            }
+            local offset_text = TextWidget:new{
+                text = tostring(parent_widget.font_offset),
+                face = safeFace(nil, 20),
+            }
+            local btn_plus = Button:new{
+                text = "+",
+                width = Screen:scaleBySize(60),
+                callback = function()
+                    parent_widget.font_offset = parent_widget.font_offset + 1
+                    parent_widget:refresh()
+                end,
+            }
+            local btn_apply = Button:new{
+                text = self:t("apply"),
+                width = Screen:scaleBySize(120),
+                callback = function()
+                    if parent_widget.props.on_apply_font then
+                        local f = parent_widget.all_fonts[parent_widget.current_font_index]
+                        parent_widget.props.on_apply_font(parent_widget.font_offset, f.key, f.is_builtin, parent_widget.lang)
+                    end
+                    UIManager:show(InfoMessage:new{
+                        text = self:t("font_applied"),
+                        timeout = 1,
+                    })
+                end,
+            }
+            local btn_cancel = Button:new{
+                text = self:t("cancel"),
+                width = Screen:scaleBySize(120),
+                callback = function()
+                    parent_widget:closePreview()
+                end,
+            }
+            local btn_hide = Button:new{
+                text = "✕",
+                width = Screen:scaleBySize(40),
+                callback = function()
+                    parent_widget.show_controls = false
+                    parent_widget:refresh()
+                end,
+            }
+
+            local current_font_name = ""
+            if parent_widget.all_fonts[parent_widget.current_font_index] then
+                current_font_name = parent_widget.all_fonts[parent_widget.current_font_index].display
+            end
+            local font_name_text = TextWidget:new{
+                text = current_font_name,
+                face = safeFace(nil, 18),
+                max_width = content_width,
+            }
+
+            local font_name_bg = FrameContainer:new{
+                background = Blitbuffer.COLOR_WHITE,
+                dimen = Geom:new{ w = content_width, h = Screen:scaleBySize(30) },
+                font_name_text,
+            }
+
+            local controls = HorizontalGroup:new{
+                btn_prev,
+                HorizontalSpan:new{ width = Screen:scaleBySize(5) },
+                btn_next,
+                HorizontalSpan:new{ width = Screen:scaleBySize(10) },
+                btn_minus,
+                HorizontalSpan:new{ width = Screen:scaleBySize(5) },
+                offset_text,
+                HorizontalSpan:new{ width = Screen:scaleBySize(5) },
+                btn_plus,
+                HorizontalSpan:new{ width = Screen:scaleBySize(15) },
+                btn_apply,
+                HorizontalSpan:new{ width = Screen:scaleBySize(5) },
+                btn_cancel,
+                HorizontalSpan:new{ width = Screen:scaleBySize(5) },
+                btn_hide,
+            }
+
+            local overlay_content = VerticalGroup:new{
+                font_name_bg,
+                CenterContainer:new{
+                    dimen = Geom:new{ w = content_width, h = Screen:scaleBySize(60) },
+                    controls,
+                },
+            }
+
+            local controls_overlay = InputContainer:new{
+                dimen = Geom:new{ w = screen_size.w, h = screen_size.h },
+                VerticalGroup:new{
+                    VerticalSpan:new{ width = screen_size.h - Screen:scaleBySize(110) },
+                    overlay_content,
+                },
+            }
+            controls_overlay.ges_events.Tap = {
+                GestureRange:new{
+                    ges = "tap",
+                    range = Geom:new{ x = 0, y = 0, w = screen_size.w, h = screen_size.h },
+                },
+            }
+            function controls_overlay:onTap()
+                parent_widget:onTap()
+            end
+
+            self[1] = OverlapGroup:new{
+                dimen = Geom:new{ w = screen_size.w, h = screen_size.h },
+                main_frame,
+                controls_overlay,
+            }
+        else
+            self[1] = main_frame
+        end
+    else
+        self[1] = main_frame
+    end
 end
 
 return PrayerTimesWidget

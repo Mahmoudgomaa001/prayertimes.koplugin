@@ -53,6 +53,8 @@ local translations = {
 
         cancel = "Cancel",
         save   = "Save",
+        preview = "Preview",
+        apply   = "Apply",
 
         country_name    = "Country name (English)",
         country_name_ar = "Country name (Arabic)",
@@ -156,7 +158,7 @@ local translations = {
         fasting_shawwal  = "Shawwal",
 
         about_text =
-            "Prayer Times\nVersion 1.0.1\n\n"
+            "Prayer Times\nVersion 1.1.0\n\n"
             .. "Accurate prayer time calculation\n"
             .. "Seven calculation methods\n"
             .. "Hijri calendar with manual adjustment\n"
@@ -218,6 +220,8 @@ local translations = {
 
         cancel = "إلغاء",
         save   = "حفظ",
+        preview = "معاينة",
+        apply   = "تطبيق",
 
         country_name    = "اسم الدولة (إنجليزي)",
         country_name_ar = "اسم الدولة (عربي)",
@@ -321,7 +325,7 @@ local translations = {
         fasting_shawwal  = "شوال",
 
         about_text =
-            "مواقيت الصلاة\nالإصدار 1.0.1\n\n"
+            "مواقيت الصلاة\nالإصدار 1.1.0\n\n"
             .. "حساب دقيق لأوقات الصلاة\n"
             .. "سبع طرق للحساب\n"
             .. "تقويم هجري مع تعديل يدوي\n"

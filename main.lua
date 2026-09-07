@@ -1,4 +1,3 @@
-
 -- main.lua
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local UIManager = require("ui/uimanager")
@@ -92,6 +91,45 @@ local function getSuggestedMethod(country)
     return nil
 end
 
+-- Helper functions for font management
+local function getFontKey(display)
+    if display.custom_font_path and display.custom_font_path ~= "" then
+        return display.custom_font_path
+    else
+        return display.font_face or "infofont"
+    end
+end
+
+local function getSavedFontOffset(display, font_key, lang)
+    local fs = display.font_sizes and display.font_sizes[lang]
+    return tonumber(fs and fs[font_key]) or nil
+end
+
+local function setFont(display, font_key, is_builtin)
+    if is_builtin then
+        display.font_face = font_key
+        display.custom_font_path = ""
+    else
+        display.custom_font_path = font_key
+    end
+end
+
+local function getAllFonts()
+    local ok_fonts, fonts = pcall(utils.getDeviceFonts)
+    if not ok_fonts or type(fonts) ~= "table" then
+        fonts = { builtin = { "infofont" }, user = {} }
+    end
+    local all = {}
+    for _, name in ipairs(fonts.builtin or {}) do
+        all[#all+1] = { key = name, is_builtin = true, display = name }
+    end
+    for display, info in pairs(fonts.user or {}) do
+        all[#all+1] = { key = info.filename, is_builtin = false, display = display }
+    end
+    table.sort(all, function(a, b) return a.display < b.display end)
+    return all
+end
+
 local PrayerTimes = WidgetContainer:extend{
     name = "prayertimes",
     config_file = "prayertimes_config.lua",
@@ -146,7 +184,6 @@ function PrayerTimes:initLuaSettings()
                 show_memory           = S.show_memory,
                 battery_format        = S.battery_format,
                 auto_show_resume      = S.auto_show_resume,
-                font_size_offset      = S.font_size_offset,
                 font_face             = S.font_face,
                 custom_font_path      = S.custom_font_path,
                 hijri_adjustment      = S.hijri_adjustment,
@@ -156,6 +193,9 @@ function PrayerTimes:initLuaSettings()
                     mondays = true, thursdays = true, white_days = true,
                     ashura = true, arafah = true, six_shawwal = true,
                 },
+                font_size_offset_ar = S.font_size_offset_ar,
+                font_size_offset_en = S.font_size_offset_en,
+                font_sizes = { ar = {}, en = {} },
             },
             alerts = {
                 flash = false, frontlight = false,
@@ -196,7 +236,6 @@ function PrayerTimes:ensureSettingsComplete()
     if d.show_memory  == nil then d.show_memory  = S.show_memory end
     d.battery_format = d.battery_format or S.battery_format
     if d.auto_show_resume == nil then d.auto_show_resume = S.auto_show_resume end
-    if d.font_size_offset == nil then d.font_size_offset = S.font_size_offset end
     d.font_face        = d.font_face        or S.font_face
     d.custom_font_path = d.custom_font_path or S.custom_font_path
     d.hijri_adjustment = tonumber(d.hijri_adjustment) or S.hijri_adjustment
@@ -211,6 +250,12 @@ function PrayerTimes:ensureSettingsComplete()
     if fd.ashura      == nil then fd.ashura      = true end
     if fd.arafah      == nil then fd.arafah      = true end
     if fd.six_shawwal == nil then fd.six_shawwal = true end
+
+    d.font_size_offset_ar = tonumber(d.font_size_offset_ar) or S.font_size_offset_ar
+    d.font_size_offset_en = tonumber(d.font_size_offset_en) or S.font_size_offset_en
+    d.font_sizes = d.font_sizes or { ar = {}, en = {} }
+    d.font_sizes.ar = d.font_sizes.ar or {}
+    d.font_sizes.en = d.font_sizes.en or {}
 
     if type(d.custom_font_path) == "string" and d.custom_font_path ~= "" then
         local base = d.custom_font_path:match("([^/\\]+)$")
@@ -246,41 +291,116 @@ function PrayerTimes:flushSettings()
     pcall(function() self.local_storage:flush() end)
 end
 
+function PrayerTimes:previewFont(font_key, is_builtin)
+    local display = self.settings.display
+    local lang = display.language or "en"
+    local default_offset = DEFAULTS.settings["font_size_offset_"..lang] or 0
+    local preview_offset = getSavedFontOffset(display, font_key, lang) or default_offset
+
+    local all_fonts = getAllFonts()
+    local current_index = 1
+    for i, font in ipairs(all_fonts) do
+        if font.key == font_key and font.is_builtin == is_builtin then
+            current_index = i
+            break
+        end
+    end
+
+    local now = os.time()
+    local today = os.date("*t", now)
+    local loc = self.settings.location
+    local dst = loc.dst_offset or 0
+    local tz  = (loc.timezone or 0) + dst
+
+    local times = calculateTimes(
+        today.year, today.month, today.day,
+        loc.latitude, loc.longitude, tz,
+        self.settings.calculation.method,
+        self.settings.calculation.asr_madhhab
+    )
+
+    local hijri_date
+    if display.show_hijri then
+        hijri_date = Hijri:gregorianToHijri(
+            today.year, today.month, today.day,
+            display.hijri_adjustment or 0
+        )
+    end
+
+    local next_prayer = self:getNextPrayer(times, now)
+    if next_prayer and next_prayer.key then
+        local tbl = translations_table[lang] or translations_table.en
+        next_prayer.name = tbl[next_prayer.key]
+                        or translations_table.en[next_prayer.key]
+                        or next_prayer.key
+    end
+
+    local display_name = loc.name
+    if lang == "ar" then
+        if loc.name_ar and loc.name_ar ~= "" then
+            display_name = loc.name_ar
+        else
+            for _, cities in pairs(locations) do
+                for _, c in ipairs(cities) do
+                    if c.name == loc.name and c.name_ar and c.name_ar ~= "" then
+                        display_name = c.name_ar
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    UIManager:show(PrayerTimesWidget:new{
+        props = {
+            settings = self.settings,
+            preview_font = font_key,
+            preview_offset = preview_offset,
+            all_fonts = all_fonts,
+            current_index = current_index,
+            times = times,
+            next_prayer = next_prayer,
+            hijri = hijri_date,
+            location_name = display_name,
+            on_apply_font = function(offset, fkey, fbuiltin, lang)
+                display.font_sizes = display.font_sizes or { ar = {}, en = {} }
+                display.font_sizes[lang] = display.font_sizes[lang] or {}
+                display.font_sizes[lang][fkey] = offset
+                setFont(display, fkey, fbuiltin)
+                self:flushSettings()
+            end,
+        },
+    })
+end
+
+function PrayerTimes:applyFont(font_key, is_builtin)
+    local display = self.settings.display
+    local lang = display.language or "en"
+    local saved_offset = getSavedFontOffset(display, font_key, lang)
+    if saved_offset then
+        -- keep per-font size, nothing else needed
+    end
+    setFont(display, font_key, is_builtin)
+    self:flushSettings()
+    UIManager:show(InfoMessage:new{
+        text = self:t("font_applied"), timeout = 3
+    })
+end
+
 function PrayerTimes:addToMainMenu(menu_items)
     menu_items.prayer_times = {
         text = self:t("prayer_times"),
         sorting_hint = "tools",
         sub_item_table = {
-            {
-                text = self:t("launch"),
-                callback = function() self:showPrayerTimes() end,
-            },
-            {
-                text = self:t("set_location"),
-                sub_item_table = self:getLocationSubmenu(),
-            },
-            {
-                text = self:t("calculation_settings"),
-                sub_item_table = self:getCalculationSubmenu(),
-            },
-            {
-                text = self:t("hijri_and_fasting"),
-                sub_item_table = self:getHijriAndFastingSubmenu(),
-            },
-            {
-                text = self:t("display_and_appearance"),
-                sub_item_table = self:getDisplaySubmenu(),
-            },
-            {
-                text = self:t("alerts"),
-                sub_item_table = self:getAlertsSubmenu(),
-            },
+            { text = self:t("launch"), callback = function() self:showPrayerTimes() end },
+            { text = self:t("set_location"), sub_item_table = self:getLocationSubmenu() },
+            { text = self:t("calculation_settings"), sub_item_table = self:getCalculationSubmenu() },
+            { text = self:t("hijri_and_fasting"), sub_item_table = self:getHijriAndFastingSubmenu() },
+            { text = self:t("display_and_appearance"), sub_item_table = self:getDisplaySubmenu() },
+            { text = self:t("alerts"), sub_item_table = self:getAlertsSubmenu() },
             {
                 text = self:t("about"),
-                callback = function()
-                    UIManager:show(InfoMessage:new{
-                        text = self:t("about_text"), timeout = 15 })
-                end,
+                callback = function() UIManager:show(InfoMessage:new{ text = self:t("about_text"), timeout = 15 }) end,
             },
         },
     }
@@ -288,41 +408,15 @@ end
 
 function PrayerTimes:getLocationSubmenu()
     return {
-        {
-            text = self:t("choose_from_list"),
-            callback = function() self:showLocationList() end,
-        },
-        {
-            text = self:t("add_location"),
-            callback = function() self:showAddLocationInput() end,
-        },
+        { text = self:t("choose_from_list"), callback = function() self:showLocationList() end },
+        { text = self:t("add_location"), callback = function() self:showAddLocationInput() end },
         {
             text = self:t("dst_adjustment"),
             sub_item_table = {
-                {
-                    text = self:t("no_dst"),
-                    checked_func = function() return self.settings.location.dst_offset == 0 end,
-                    callback = function()
-                        self.settings.location.dst_offset = 0; self:flushSettings() end,
-                },
-                {
-                    text = self:t("add_1_hour"),
-                    checked_func = function() return self.settings.location.dst_offset == 1 end,
-                    callback = function()
-                        self.settings.location.dst_offset = 1; self:flushSettings() end,
-                },
-                {
-                    text = self:t("add_2_hours"),
-                    checked_func = function() return self.settings.location.dst_offset == 2 end,
-                    callback = function()
-                        self.settings.location.dst_offset = 2; self:flushSettings() end,
-                },
-                {
-                    text = self:t("subtract_1_hour"),
-                    checked_func = function() return self.settings.location.dst_offset == -1 end,
-                    callback = function()
-                        self.settings.location.dst_offset = -1; self:flushSettings() end,
-                },
+                { text = self:t("no_dst"), checked_func = function() return self.settings.location.dst_offset == 0 end, callback = function() self.settings.location.dst_offset = 0; self:flushSettings() end },
+                { text = self:t("add_1_hour"), checked_func = function() return self.settings.location.dst_offset == 1 end, callback = function() self.settings.location.dst_offset = 1; self:flushSettings() end },
+                { text = self:t("add_2_hours"), checked_func = function() return self.settings.location.dst_offset == 2 end, callback = function() self.settings.location.dst_offset = 2; self:flushSettings() end },
+                { text = self:t("subtract_1_hour"), checked_func = function() return self.settings.location.dst_offset == -1 end, callback = function() self.settings.location.dst_offset = -1; self:flushSettings() end },
             },
         },
     }
@@ -330,191 +424,51 @@ end
 
 function PrayerTimes:getCalculationSubmenu()
     local method_list = {
-        { key = "MWL",       tkey = "mwl" },
-        { key = "Egyptian",  tkey = "egyptian" },
+        { key = "MWL", tkey = "mwl" },
+        { key = "Egyptian", tkey = "egyptian" },
         { key = "UmmAlQura", tkey = "ummalqura" },
-        { key = "Karachi",   tkey = "karachi" },
-        { key = "ISNA",      tkey = "isna" },
-        { key = "Jafari",    tkey = "jafari" },
-        { key = "Tehran",    tkey = "tehran" },
+        { key = "Karachi", tkey = "karachi" },
+        { key = "ISNA", tkey = "isna" },
+        { key = "Jafari", tkey = "jafari" },
+        { key = "Tehran", tkey = "tehran" },
     }
     local method_items = {}
     for _, m in ipairs(method_list) do
         method_items[#method_items+1] = {
             text = self:t(m.tkey),
-            checked_func = function()
-                return self.settings.calculation.method == m.key
-            end,
-            callback = function()
-                self.settings.calculation.method = m.key
-                self:flushSettings()
-            end,
+            checked_func = function() return self.settings.calculation.method == m.key end,
+            callback = function() self.settings.calculation.method = m.key; self:flushSettings() end,
         }
     end
-
     return {
-        {
-            text = self:t("calculation_method"),
-            sub_item_table = method_items,
-        },
-        {
-            text = self:t("asr_madhhab"),
-            sub_item_table = {
-                {
-                    text = self:t("shafi"),
-                    checked_func = function()
-                        return self.settings.calculation.asr_madhhab == "Shafi" end,
-                    callback = function()
-                        self.settings.calculation.asr_madhhab = "Shafi"
-                        self:flushSettings()
-                    end,
-                },
-                {
-                    text = self:t("hanafi"),
-                    checked_func = function()
-                        return self.settings.calculation.asr_madhhab == "Hanafi" end,
-                    callback = function()
-                        self.settings.calculation.asr_madhhab = "Hanafi"
-                        self:flushSettings()
-                    end,
-                },
-            },
-        },
+        { text = self:t("calculation_method"), sub_item_table = method_items },
+        { text = self:t("asr_madhhab"), sub_item_table = {
+            { text = self:t("shafi"), checked_func = function() return self.settings.calculation.asr_madhhab == "Shafi" end, callback = function() self.settings.calculation.asr_madhhab = "Shafi"; self:flushSettings() end },
+            { text = self:t("hanafi"), checked_func = function() return self.settings.calculation.asr_madhhab == "Hanafi" end, callback = function() self.settings.calculation.asr_madhhab = "Hanafi"; self:flushSettings() end },
+        }},
     }
 end
 
 function PrayerTimes:getHijriAndFastingSubmenu()
     local function adjItem(value, label)
-        return {
-            text = label,
-            checked_func = function()
-                return self.settings.display.hijri_adjustment == value
-            end,
-            callback = function()
-                self.settings.display.hijri_adjustment = value
-                self:flushSettings()
-            end,
-        }
+        return { text = label, checked_func = function() return self.settings.display.hijri_adjustment == value end, callback = function() self.settings.display.hijri_adjustment = value; self:flushSettings() end }
     end
-
     return {
-        {
-            text = self:t("show_hijri"),
-            checked_func = function() return self.settings.display.show_hijri end,
-            callback = function()
-                self.settings.display.show_hijri = not self.settings.display.show_hijri
-                self:flushSettings()
-            end,
-        },
-        {
-            text = self:t("hijri_adjustment"),
-            sub_item_table = {
-                adjItem(-2, "-2 " .. self:t("days")),
-                adjItem(-1, "-1 " .. self:t("day")),
-                adjItem( 0, "0 (" .. self:t("default_val") .. ")"),
-                adjItem( 1, "+1 " .. self:t("day")),
-                adjItem( 2, "+2 " .. self:t("days")),
-            },
-        },
-        {
-            text = self:t("show_fasting_days"),
-            checked_func = function() return self.settings.display.show_fasting_days end,
-            callback = function()
-                self.settings.display.show_fasting_days =
-                    not self.settings.display.show_fasting_days
-                self:flushSettings()
-            end,
-        },
-        {
-            text = self:t("fasting_reminder_days"),
-            sub_item_table = {
-                {
-                    text = self:t("fasting_reminder_0"),
-                    checked_func = function()
-                        return (self.settings.display.fasting_reminder_days or 1) == 0 end,
-                    callback = function()
-                        self.settings.display.fasting_reminder_days = 0
-                        self:flushSettings()
-                    end,
-                },
-                {
-                    text = self:t("fasting_reminder_1"),
-                    checked_func = function()
-                        return (self.settings.display.fasting_reminder_days or 1) == 1 end,
-                    callback = function()
-                        self.settings.display.fasting_reminder_days = 1
-                        self:flushSettings()
-                    end,
-                },
-                {
-                    text = self:t("fasting_reminder_2"),
-                    checked_func = function()
-                        return (self.settings.display.fasting_reminder_days or 1) == 2 end,
-                    callback = function()
-                        self.settings.display.fasting_reminder_days = 2
-                        self:flushSettings()
-                    end,
-                },
-            },
-        },
-        {
-            text = self:t("fasting_days"),
-            sub_item_table = {
-                {
-                    text = self:t("monday_thursday_fasting"),
-                    checked_func = function()
-                        local fd = self.settings.display.fasting_days
-                        return fd.mondays and fd.thursdays
-                    end,
-                    callback = function()
-                        local fd = self.settings.display.fasting_days
-                        local on = not (fd.mondays and fd.thursdays)
-                        fd.mondays, fd.thursdays = on, on
-                        self:flushSettings()
-                    end,
-                },
-                {
-                    text = self:t("white_days_fasting"),
-                    checked_func = function()
-                        return self.settings.display.fasting_days.white_days end,
-                    callback = function()
-                        local fd = self.settings.display.fasting_days
-                        fd.white_days = not fd.white_days
-                        self:flushSettings()
-                    end,
-                },
-                {
-                    text = self:t("ashura_fasting"),
-                    checked_func = function()
-                        return self.settings.display.fasting_days.ashura end,
-                    callback = function()
-                        local fd = self.settings.display.fasting_days
-                        fd.ashura = not fd.ashura
-                        self:flushSettings()
-                    end,
-                },
-                {
-                    text = self:t("arafah_fasting"),
-                    checked_func = function()
-                        return self.settings.display.fasting_days.arafah end,
-                    callback = function()
-                        local fd = self.settings.display.fasting_days
-                        fd.arafah = not fd.arafah
-                        self:flushSettings()
-                    end,
-                },
-                {
-                    text = self:t("six_shawwal_fasting"),
-                    checked_func = function()
-                        return self.settings.display.fasting_days.six_shawwal end,
-                    callback = function()
-                        local fd = self.settings.display.fasting_days
-                        fd.six_shawwal = not fd.six_shawwal
-                        self:flushSettings()
-                    end,
-                },
-            },
-        },
+        { text = self:t("show_hijri"), checked_func = function() return self.settings.display.show_hijri end, callback = function() self.settings.display.show_hijri = not self.settings.display.show_hijri; self:flushSettings() end },
+        { text = self:t("hijri_adjustment"), sub_item_table = { adjItem(-2, "-2 " .. self:t("days")), adjItem(-1, "-1 " .. self:t("day")), adjItem(0, "0 (" .. self:t("default_val") .. ")"), adjItem(1, "+1 " .. self:t("day")), adjItem(2, "+2 " .. self:t("days")) } },
+        { text = self:t("show_fasting_days"), checked_func = function() return self.settings.display.show_fasting_days end, callback = function() self.settings.display.show_fasting_days = not self.settings.display.show_fasting_days; self:flushSettings() end },
+        { text = self:t("fasting_reminder_days"), sub_item_table = {
+            { text = self:t("fasting_reminder_0"), checked_func = function() return (self.settings.display.fasting_reminder_days or 1) == 0 end, callback = function() self.settings.display.fasting_reminder_days = 0; self:flushSettings() end },
+            { text = self:t("fasting_reminder_1"), checked_func = function() return (self.settings.display.fasting_reminder_days or 1) == 1 end, callback = function() self.settings.display.fasting_reminder_days = 1; self:flushSettings() end },
+            { text = self:t("fasting_reminder_2"), checked_func = function() return (self.settings.display.fasting_reminder_days or 1) == 2 end, callback = function() self.settings.display.fasting_reminder_days = 2; self:flushSettings() end },
+        }},
+        { text = self:t("fasting_days"), sub_item_table = {
+            { text = self:t("monday_thursday_fasting"), checked_func = function() local fd = self.settings.display.fasting_days; return fd.mondays and fd.thursdays end, callback = function() local fd = self.settings.display.fasting_days; local on = not (fd.mondays and fd.thursdays); fd.mondays, fd.thursdays = on, on; self:flushSettings() end },
+            { text = self:t("white_days_fasting"), checked_func = function() return self.settings.display.fasting_days.white_days end, callback = function() self.settings.display.fasting_days.white_days = not self.settings.display.fasting_days.white_days; self:flushSettings() end },
+            { text = self:t("ashura_fasting"), checked_func = function() return self.settings.display.fasting_days.ashura end, callback = function() self.settings.display.fasting_days.ashura = not self.settings.display.fasting_days.ashura; self:flushSettings() end },
+            { text = self:t("arafah_fasting"), checked_func = function() return self.settings.display.fasting_days.arafah end, callback = function() self.settings.display.fasting_days.arafah = not self.settings.display.fasting_days.arafah; self:flushSettings() end },
+            { text = self:t("six_shawwal_fasting"), checked_func = function() return self.settings.display.fasting_days.six_shawwal end, callback = function() self.settings.display.fasting_days.six_shawwal = not self.settings.display.fasting_days.six_shawwal; self:flushSettings() end },
+        }},
     }
 end
 
@@ -532,23 +486,14 @@ function PrayerTimes:getFontSubmenu()
             text = name,
             checked_func = function()
                 local d = self.settings.display
-                return (d.custom_font_path or "") == ""
-                   and (d.font_face or DEFAULTS.default_face) == name
+                return (d.custom_font_path or "") == "" and (d.font_face or DEFAULTS.default_face) == name
             end,
             callback = function()
-                local d = self.settings.display
-                d.font_face = name
-                d.custom_font_path = ""
-                self:flushSettings()
-                UIManager:show(InfoMessage:new{
-                    text = self:t("font_applied"), timeout = 3 })
+                self:previewFont(name, true)
             end,
         }
     end
-    items[#items+1] = {
-        text = self:t("font_face_builtin"),
-        sub_item_table = builtin_items,
-    }
+    items[#items+1] = { text = self:t("font_face_builtin"), sub_item_table = builtin_items }
 
     local user_items = {}
     local count = 0
@@ -557,279 +502,60 @@ function PrayerTimes:getFontSubmenu()
         local filename = info.filename
         user_items[#user_items+1] = {
             text = display,
-            checked_func = function()
-                return (self.settings.display.custom_font_path or "") == filename
-            end,
-            callback = function()
-                self.settings.display.custom_font_path = filename
-                self:flushSettings()
-                UIManager:show(InfoMessage:new{
-                    text = self:t("font_applied"), timeout = 3 })
-            end,
+            checked_func = function() return (self.settings.display.custom_font_path or "") == filename end,
+            callback = function() self:previewFont(filename, false) end,
         }
     end
     table.sort(user_items, function(a, b) return a.text < b.text end)
 
     if count > 0 then
-        items[#items+1] = {
-            text = self:t("font_face_device") .. " (" .. count .. ")",
-            sub_item_table = user_items,
-        }
+        items[#items+1] = { text = self:t("font_face_device") .. " (" .. count .. ")", sub_item_table = user_items }
     else
-        items[#items+1] = {
-            text = self:t("font_face_device") .. " (0)",
-            callback = function()
-                UIManager:show(InfoMessage:new{
-                    text = self:t("font_face_folder_hint"),
-                    timeout = 30,
-                })
-            end,
-        }
+        items[#items+1] = { text = self:t("font_face_device") .. " (0)", callback = function() UIManager:show(InfoMessage:new{ text = self:t("font_face_folder_hint"), timeout = 30 }) end }
     end
 
-    items[#items+1] = {
-        text = self:t("font_how_to_add"),
-        callback = function()
-            UIManager:show(InfoMessage:new{
-                text = self:t("font_face_folder_hint"),
-                timeout = 30,
-            })
-        end,
-    }
+    items[#items+1] = { text = self:t("font_how_to_add"), callback = function() UIManager:show(InfoMessage:new{ text = self:t("font_face_folder_hint"), timeout = 30 }) end }
 
     return items
 end
 
 function PrayerTimes:getDisplaySubmenu()
     return {
-        {
-            text = self:t("language"),
-            sub_item_table = {
-                {
-                    text = "English",
-                    checked_func = function()
-                        return self.settings.display.language == "en" end,
-                    callback = function()
-                        self.settings.display.language = "en"; self:flushSettings() end,
-                },
-                {
-                    text = "العربية",
-                    checked_func = function()
-                        return self.settings.display.language == "ar" end,
-                    callback = function()
-                        self.settings.display.language = "ar"; self:flushSettings() end,
-                },
-            },
-        },
-        {
-            text = self:t("time_format"),
-            sub_item_table = {
-                {
-                    text = "24",
-                    checked_func = function()
-                        return self.settings.display.time_format == 24 end,
-                    callback = function()
-                        self.settings.display.time_format = 24; self:flushSettings() end,
-                },
-                {
-                    text = "12",
-                    checked_func = function()
-                        return self.settings.display.time_format == 12 end,
-                    callback = function()
-                        self.settings.display.time_format = 12; self:flushSettings() end,
-                },
-            },
-        },
-        {
-            text = self:t("clock_mode"),
-            sub_item_table = {
-                {
-                    text = self:t("static_mode"),
-                    checked_func = function()
-                        return self.settings.display.clock_mode == "static" end,
-                    callback = function()
-                        self.settings.display.clock_mode = "static"; self:flushSettings() end,
-                },
-                {
-                    text = self:t("live_mode"),
-                    checked_func = function()
-                        return self.settings.display.clock_mode == "live" end,
-                    callback = function()
-                        self.settings.display.clock_mode = "live"; self:flushSettings() end,
-                },
-                {
-                    text = self:t("prayer_only"),
-                    checked_func = function()
-                        return self.settings.display.clock_mode == "prayer" end,
-                    callback = function()
-                        self.settings.display.clock_mode = "prayer"; self:flushSettings() end,
-                },
-            },
-        },
-        {
-            text = self:t("font_face"),
-            sub_item_table = self:getFontSubmenu(),
-        },
-        {
-            text = self:t("font_size"),
-            callback = function()
-                local SpinWidget = require("ui/widget/spinwidget")
-                UIManager:show(SpinWidget:new{
-                    value = self.settings.display.font_size_offset
-                            or DEFAULTS.settings.font_size_offset,
-                    value_min = -15, value_max = 20, value_step = 1,
-                    ok_text = self:t("save"),
-                    title_text = self:t("font_size"),
-                    callback = function(spin)
-                        self.settings.display.font_size_offset = spin.value
-                        self:flushSettings()
-                    end,
-                })
-            end,
-        },
-        {
-            text = self:t("screen_brightness"),
-            callback = function()
-                local SpinWidget = require("ui/widget/spinwidget")
-                UIManager:show(SpinWidget:new{
-                    value = self.settings.widget_brightness or -1,
-                    value_min = -1, value_max = 24, value_step = 1,
-                    ok_text = self:t("save"),
-                    title_text = self:t("screen_brightness"),
-                    info_text = self:t("screen_brightness_hint"),
-                    callback = function(spin)
-                        self.settings.widget_brightness = spin.value
-                        self:flushSettings()
-                    end,
-                })
-            end,
-        },
-        {
-            text = self:t("status_widgets"),
-            sub_item_table = {
-                {
-                    text = self:t("battery_widget"),
-                    checked_func = function()
-                        return self.settings.display.show_battery end,
-                    callback = function()
-                        local d = self.settings.display
-                        d.show_battery = not d.show_battery
-                        self:flushSettings()
-                    end,
-                },
-                {
-                    text = self:t("battery_format"),
-                    sub_item_table = {
-                        {
-                            text = self:t("battery_icon"),
-                            checked_func = function()
-                                return self.settings.display.battery_format == "icon" end,
-                            callback = function()
-                                self.settings.display.battery_format = "icon"
-                                self:flushSettings()
-                            end,
-                        },
-                        {
-                            text = self:t("battery_percent"),
-                            checked_func = function()
-                                return self.settings.display.battery_format == "percent" end,
-                            callback = function()
-                                self.settings.display.battery_format = "percent"
-                                self:flushSettings()
-                            end,
-                        },
-                        {
-                            text = self:t("battery_both"),
-                            checked_func = function()
-                                return self.settings.display.battery_format == "both" end,
-                            callback = function()
-                                self.settings.display.battery_format = "both"
-                                self:flushSettings()
-                            end,
-                        },
-                    },
-                },
-                {
-                    text = self:t("wifi_widget"),
-                    checked_func = function() return self.settings.display.show_wifi end,
-                    callback = function()
-                        local d = self.settings.display
-                        d.show_wifi = not d.show_wifi
-                        self:flushSettings()
-                    end,
-                },
-                {
-                    text = self:t("memory_widget"),
-                    checked_func = function() return self.settings.display.show_memory end,
-                    callback = function()
-                        local d = self.settings.display
-                        d.show_memory = not d.show_memory
-                        self:flushSettings()
-                    end,
-                },
-            },
-        },
-        {
-            text = self:t("auto_show_resume"),
-            checked_func = function() return self.settings.display.auto_show_resume end,
-            callback = function()
-                local d = self.settings.display
-                d.auto_show_resume = not d.auto_show_resume
-                self:flushSettings()
-                if d.auto_show_resume then
-                    UIManager:show(InfoMessage:new{
-                        text = self:t("auto_show_resume_info") })
-                end
-            end,
-        },
+        { text = self:t("language"), sub_item_table = {
+            { text = "English", checked_func = function() return self.settings.display.language == "en" end, callback = function() self.settings.display.language = "en"; self:flushSettings() end },
+            { text = "العربية", checked_func = function() return self.settings.display.language == "ar" end, callback = function() self.settings.display.language = "ar"; self:flushSettings() end },
+        }},
+        { text = self:t("time_format"), sub_item_table = {
+            { text = "24", checked_func = function() return self.settings.display.time_format == 24 end, callback = function() self.settings.display.time_format = 24; self:flushSettings() end },
+            { text = "12", checked_func = function() return self.settings.display.time_format == 12 end, callback = function() self.settings.display.time_format = 12; self:flushSettings() end },
+        }},
+        { text = self:t("clock_mode"), sub_item_table = {
+            { text = self:t("static_mode"), checked_func = function() return self.settings.display.clock_mode == "static" end, callback = function() self.settings.display.clock_mode = "static"; self:flushSettings() end },
+            { text = self:t("live_mode"), checked_func = function() return self.settings.display.clock_mode == "live" end, callback = function() self.settings.display.clock_mode = "live"; self:flushSettings() end },
+            { text = self:t("prayer_only"), checked_func = function() return self.settings.display.clock_mode == "prayer" end, callback = function() self.settings.display.clock_mode = "prayer"; self:flushSettings() end },
+        }},
+        { text = self:t("font_face"), sub_item_table = self:getFontSubmenu() },
+        { text = self:t("screen_brightness"), callback = function() local SpinWidget = require("ui/widget/spinwidget"); UIManager:show(SpinWidget:new{ value = self.settings.widget_brightness or -1, value_min = -1, value_max = 24, value_step = 1, ok_text = self:t("save"), title_text = self:t("screen_brightness"), info_text = self:t("screen_brightness_hint"), callback = function(spin) self.settings.widget_brightness = spin.value; self:flushSettings() end }) end },
+        { text = self:t("status_widgets"), sub_item_table = {
+            { text = self:t("battery_widget"), checked_func = function() return self.settings.display.show_battery end, callback = function() self.settings.display.show_battery = not self.settings.display.show_battery; self:flushSettings() end },
+            { text = self:t("battery_format"), sub_item_table = {
+                { text = self:t("battery_icon"), checked_func = function() return self.settings.display.battery_format == "icon" end, callback = function() self.settings.display.battery_format = "icon"; self:flushSettings() end },
+                { text = self:t("battery_percent"), checked_func = function() return self.settings.display.battery_format == "percent" end, callback = function() self.settings.display.battery_format = "percent"; self:flushSettings() end },
+                { text = self:t("battery_both"), checked_func = function() return self.settings.display.battery_format == "both" end, callback = function() self.settings.display.battery_format = "both"; self:flushSettings() end },
+            }},
+            { text = self:t("wifi_widget"), checked_func = function() return self.settings.display.show_wifi end, callback = function() self.settings.display.show_wifi = not self.settings.display.show_wifi; self:flushSettings() end },
+            { text = self:t("memory_widget"), checked_func = function() return self.settings.display.show_memory end, callback = function() self.settings.display.show_memory = not self.settings.display.show_memory; self:flushSettings() end },
+        }},
+        { text = self:t("auto_show_resume"), checked_func = function() return self.settings.display.auto_show_resume end, callback = function() self.settings.display.auto_show_resume = not self.settings.display.auto_show_resume; self:flushSettings(); if self.settings.display.auto_show_resume then UIManager:show(InfoMessage:new{ text = self:t("auto_show_resume_info") }) end end },
     }
 end
 
 function PrayerTimes:getAlertsSubmenu()
     return {
-        {
-            text = self:t("flash_screen"),
-            checked_func = function() return self.settings.alerts.flash end,
-            callback = function()
-                local a = self.settings.alerts
-                a.flash = not a.flash
-                self:flushSettings()
-            end,
-        },
-        {
-            text = self:t("frontlight_pulse"),
-            checked_func = function() return self.settings.alerts.frontlight end,
-            callback = function()
-                local a = self.settings.alerts
-                a.frontlight = not a.frontlight
-                self:flushSettings()
-            end,
-        },
-        {
-            text = self:t("show_message"),
-            checked_func = function() return self.settings.alerts.message end,
-            callback = function()
-                local a = self.settings.alerts
-                a.message = not a.message
-                self:flushSettings()
-            end,
-        },
-        {
-            text = self:t("frontlight_duration"),
-            callback = function()
-                local SpinWidget = require("ui/widget/spinwidget")
-                UIManager:show(SpinWidget:new{
-                    value = self.settings.alerts.frontlight_duration or 5,
-                    value_min = 1, value_max = 30, value_step = 1,
-                    ok_text = self:t("save"),
-                    title_text = self:t("frontlight_duration"),
-                    callback = function(spin)
-                        self.settings.alerts.frontlight_duration = spin.value
-                        self:flushSettings()
-                    end,
-                })
-            end,
-        },
+        { text = self:t("flash_screen"), checked_func = function() return self.settings.alerts.flash end, callback = function() self.settings.alerts.flash = not self.settings.alerts.flash; self:flushSettings() end },
+        { text = self:t("frontlight_pulse"), checked_func = function() return self.settings.alerts.frontlight end, callback = function() self.settings.alerts.frontlight = not self.settings.alerts.frontlight; self:flushSettings() end },
+        { text = self:t("show_message"), checked_func = function() return self.settings.alerts.message end, callback = function() self.settings.alerts.message = not self.settings.alerts.message; self:flushSettings() end },
+        { text = self:t("frontlight_duration"), callback = function() local SpinWidget = require("ui/widget/spinwidget"); UIManager:show(SpinWidget:new{ value = self.settings.alerts.frontlight_duration or 5, value_min = 1, value_max = 30, value_step = 1, ok_text = self:t("save"), title_text = self:t("frontlight_duration"), callback = function(spin) self.settings.alerts.frontlight_duration = spin.value; self:flushSettings() end }) end },
     }
 end
 

@@ -1,6 +1,6 @@
 # مواقيت الصلاة لـ KOReader – دليل المستخدم (العربية)
 
-الإصدار 1.0.1
+الإصدار 1.1.0
 
 **المستودع:** [github.com/Mahmoudgomaa001/koreader.prayertimes](https://github.com/Mahmoudgomaa001/koreader.prayertimes)
 

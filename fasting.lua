@@ -45,11 +45,19 @@ local function getFastingReminders(settings, lang)
     if advance > 2 then advance = 2 end
     local hijri_adj = disp.hijri_adjustment or 0
 
+    -- Determine local time offset (timezone + dst_offset)
+    local loc = settings.location or {}
+    local base_tz = tonumber(loc.timezone) or 0
+    local dst = tonumber(loc.dst_offset) or 0
+    local utc_offset = base_tz + dst
+
     local now = os.time()
+    local local_now = now + utc_offset * 3600
+
     local reminders = {}
 
     for ahead = 0, advance do
-        local check_time = now + (ahead * 86400)
+        local check_time = local_now + (ahead * 86400)
         local d = os.date("*t", check_time)
         local weekday = os.date("%A", check_time)
         local h = Hijri:gregorianToHijri(d.year, d.month, d.day, hijri_adj)
