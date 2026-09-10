@@ -33,6 +33,7 @@ local GestureRange = utils.GestureRange
 local Blitbuffer = utils.Blitbuffer
 local Screen = utils.Screen
 local UIManager = utils.UIManager
+local Device = utils.Device
 local logger = utils.logger
 local InfoMessage = utils.InfoMessage
 
@@ -47,6 +48,32 @@ local loadImage = utils.loadImage
 local interp = utils.interp
 local getActiveLayout = utils.getActiveLayout
 local makeFixedCell = utils.makeFixedCell
+
+-- -----------------------------------------------------------------------------
+-- Arabic Digit Translation Helper
+-- Converts standard Western digits (1, 2, 3...) to Arabic-Indic digits (١, ٢, ٣...)
+-- when the interface is set to Arabic, maintaining traditional regional formatting.
+-- -----------------------------------------------------------------------------
+local arabic_digits = {
+    ["0"] = "٠",
+    ["1"] = "١",
+    ["2"] = "٢",
+    ["3"] = "٣",
+    ["4"] = "٤",
+    ["5"] = "٥",
+    ["6"] = "٦",
+    ["7"] = "٧",
+    ["8"] = "٨",
+    ["9"] = "٩",
+}
+
+local function localizeDigits(text, lang)
+    text = tostring(text or "")
+    if lang ~= "ar" then
+        return text
+    end
+    return (text:gsub("%d", arabic_digits))
+end
 
 local function getFontKey(display)
     if display.custom_font_path and display.custom_font_path ~= "" then
@@ -135,12 +162,13 @@ function PrayerTimesWidget:init()
 
     if not self.is_preview then
         pcall(function()
-            UIManager:setDirty("all", "flashpartial")
+            -- Initial render gets a full clean display refresh to wipe away book rendering
+            UIManager:setDirty("all", "full")
             self:setupScheduling()
             self:applyWidgetBrightness()
         end)
     else
-        UIManager:setDirty("all", "flashpartial")
+        UIManager:setDirty("all", "full")
     end
 end
 
@@ -165,11 +193,30 @@ function PrayerTimesWidget:onTapClose()
 end
 PrayerTimesWidget.onAnyKeyPressed = PrayerTimesWidget.onTapClose
 
+-- -----------------------------------------------------------------------------
+-- Lifecycle Teardown Implementation
+-- Cleanly closes the widget and ensures timers are unscheduled and system
+-- brightness is fully restored to prevent lock-ins or CPU resource leaks.
+-- -----------------------------------------------------------------------------
+function PrayerTimesWidget:onCloseWidget()
+    self.is_closing = true
+    self:unscheduleTimers()
+    self:restoreWidgetBrightness()
+    UIManager:setDirty("all", "full")
+end
+
+function PrayerTimesWidget:destroy()
+    self:onCloseWidget()
+    if self[1] then
+        self[1]:destroy()
+    end
+end
+
 function PrayerTimesWidget:closePreview()
     self.is_closing = true
     self:unscheduleTimers()
+    self:restoreWidgetBrightness()
     UIManager:close(self)
-    -- Force full refresh shortly after closing
     UIManager:scheduleIn(0.1, function()
         UIManager:setDirty("all", "full")
     end)
@@ -192,7 +239,9 @@ function PrayerTimesWidget:t(key)
 end
 
 function PrayerTimesWidget:formatTime(time_str)
-    if type(time_str) ~= "string" then return "--:--" end
+    if type(time_str) ~= "string" or time_str == "--:--" then
+        return self:t("unavailable")
+    end
     if self.time_format == 12 then
         local h, m = time_str:match("(%d+):(%d+)")
         h = tonumber(h) or 0
@@ -204,17 +253,30 @@ function PrayerTimesWidget:formatTime(time_str)
 end
 
 function PrayerTimesWidget:getSuffix(time_str)
-    if self.time_format == 12 and type(time_str) == "string" then
+    if self.time_format == 12 and type(time_str) == "string" and time_str ~= "--:--" then
         local h = tonumber(time_str:match("(%d+):")) or 0
         return (h >= 12) and self:t("pm") or self:t("am")
     end
     return ""
 end
 
+-- -----------------------------------------------------------------------------
+-- Kindle Local Clock Sync & Optional DST offset
+-- When 'apply_dst_to_clock' is enabled, the manual DST offset (+1, +2, -1)
+-- is added directly to the displayed clock. Otherwise, it matches the device's clock.
+-- -----------------------------------------------------------------------------
 function PrayerTimesWidget:getAdjustedNow()
-    local loc = self.props.settings.location or {}
-    local utc_offset = (loc.timezone or 0) + (loc.dst_offset or 0)
-    return os.time() + utc_offset * 3600
+    local now = os.time()
+    local settings = self.props.settings or {}
+    local display = settings.display or {}
+
+    if not display.apply_dst_to_clock then
+        return now
+    end
+
+    local loc = settings.location or {}
+    local dst = tonumber(loc.dst_offset) or 0
+    return now + dst * 3600
 end
 
 function PrayerTimesWidget:setupScheduling()
@@ -253,6 +315,11 @@ function PrayerTimesWidget:setupScheduling()
     end
 end
 
+-- -----------------------------------------------------------------------------
+-- Smooth E-ink Refresh Strategy
+-- Uses lightweight `"ui"` updates for standard background minute refreshes.
+-- This completely prevents physical screen flashing/flicker on e-ink e-readers.
+-- -----------------------------------------------------------------------------
 function PrayerTimesWidget:refresh()
     local ok, err = pcall(function()
         self:render()
@@ -349,7 +416,7 @@ function PrayerTimesWidget:render()
         local suf = self:getSuffix(raw)
         if suf ~= "" then txt = txt .. " " .. suf end
         clock_w = TextBoxWidget:new{
-            text = txt,
+            text = localizeDigits(txt, self.lang),
             face = safeFace(bf, DEFAULTS.fonts.clock + off),
             width = content_width,
             alignment = alignOf("clock"),
@@ -387,7 +454,7 @@ function PrayerTimesWidget:render()
         end
 
         combined_date_w = TextBoxWidget:new{
-            text = combined,
+            text = localizeDigits(combined, self.lang),
             face = safeFace(bf, DEFAULTS.fonts.date + off),
             width = content_width,
             alignment = alignOf("combined_date"),
@@ -412,7 +479,7 @@ function PrayerTimesWidget:render()
             end
             if #lines > 0 then
                 fasting_w = TextBoxWidget:new{
-                    text = table.concat(lines, "\n"),
+                    text = localizeDigits(table.concat(lines, "\n"), self.lang),
                     face = safeFace(bf, DEFAULTS.fonts.fasting + off),
                     width = content_width,
                     alignment = "center",
@@ -439,7 +506,7 @@ function PrayerTimesWidget:render()
             local cd_text = string.format("%s %s %s %s",
                 t.next_prayer_label, next_prayer.name, t.in_word, table.concat(parts, " "))
             countdown_w = TextBoxWidget:new{
-                text = cd_text,
+                text = localizeDigits(cd_text, self.lang),
                 face = safeFace(bf, DEFAULTS.fonts.countdown + off),
                 width = content_width,
                 alignment = alignOf("countdown"),
@@ -486,7 +553,7 @@ function PrayerTimesWidget:render()
 
                 local map = {
                     label = makeFixedCell(label, status_font, label_w, cell_h, bf),
-                    value = makeFixedCell(value, status_font, val_w,   cell_h, bf),
+                    value = makeFixedCell(localizeDigits(value, self.lang), status_font, val_w, cell_h, bf),
                 }
 
                 local children = {}
@@ -549,6 +616,9 @@ function PrayerTimesWidget:render()
 
         local icon_img = loadImage(icon_file, icon_size, icon_size)
 
+        local display_time = self:formatTime(time_str)
+        local localized_time = localizeDigits(display_time, self.lang)
+
         local map = {
             icon = icon_img
                 and CenterContainer:new{
@@ -557,7 +627,7 @@ function PrayerTimesWidget:render()
                     }
                 or HorizontalSpan:new{ width = col_icon },
             plabel = makeFixedCell(label, prayer_font, col_label, row_h, bf),
-            ptime  = makeFixedCell(self:formatTime(time_str), prayer_font, col_time, row_h, bf),
+            ptime  = makeFixedCell(localized_time, prayer_font, col_time, row_h, bf),
         }
 
         local suf = self:getSuffix(time_str)
@@ -715,7 +785,7 @@ function PrayerTimesWidget:render()
                 end,
             }
             local offset_text = TextWidget:new{
-                text = tostring(parent_widget.font_offset),
+                text = localizeDigits(parent_widget.font_offset, parent_widget.lang),
                 face = safeFace(nil, 20),
             }
             local btn_plus = Button:new{

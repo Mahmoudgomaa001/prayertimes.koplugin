@@ -52,14 +52,19 @@ local function getFastingReminders(settings, lang)
     local utc_offset = base_tz + dst
 
     local now = os.time()
-    local local_now = now + utc_offset * 3600
+    -- Shift epoch time to target location's local meridian
+    local local_now = now + (utc_offset * 3600)
 
     local reminders = {}
 
     for ahead = 0, advance do
         local check_time = local_now + (ahead * 86400)
-        local d = os.date("*t", check_time)
-        local weekday = os.date("%A", check_time)
+        -- FIX: Use "!" prefix to force UTC interpretation.
+        -- This prevents os.date from applying the SYSTEM timezone offset
+        -- on top of our manually-applied location timezone offset,
+        -- which would cause double-shifting bugs on devices with wrong system time.
+        local d = os.date("!*t", check_time)
+        local weekday = os.date("!%A", check_time)
         local h = Hijri:gregorianToHijri(d.year, d.month, d.day, hijri_adj)
         local is_fasting, reason_list = checkFastingForDate(h, weekday, cfg)
         if is_fasting then

@@ -1,6 +1,6 @@
 -- defaults.lua
 local DEFAULTS = {
-    version = "1.1.0",
+    version = "1.2.0",
     fonts = {
         title             = 30,
         clock             = 42,
@@ -50,6 +50,18 @@ local DEFAULTS = {
         method                = "Egyptian",
         asr_madhhab           = "Shafi",
         dst_offset            = 0,
+        apply_dst_to_clock    = false,
+        high_latitude_rule    = "none",
+        high_latitude_minutes = 90,
+        force_ramadan         = nil,
+        adjustments = {
+            fajr    = 0,
+            sunrise = 0,
+            dhuhr   = 0,
+            asr     = 0,
+            maghrib = 0,
+            isha    = 0,
+        },
         font_sizes = {
             ["ar"] = {
                 ["Alkhalil-Round Oplique Right.otf"] = 4,
@@ -120,7 +132,8 @@ local DEFAULTS = {
         ["Jordan"]               = "Egyptian",
         ["Algeria"]              = "Egyptian",
         ["Tunisia"]              = "Egyptian",
-        ["Morocco"]              = "Egyptian",
+        ["Morocco"]              = "Moroccan",
+        ["Mauritania"]           = "Moroccan",
         ["Saudi Arabia"]         = "UmmAlQura",
         ["Yemen"]                = "UmmAlQura",
         ["UAE"]                  = "UmmAlQura",
@@ -143,6 +156,9 @@ local DEFAULTS = {
         ["United Kingdom"]       = "MWL",
         ["Germany"]              = "MWL",
         ["France"]               = "MWL",
+        ["Somalia"]              = "Egyptian",
+        ["Djibouti"]             = "Egyptian",
+        ["Comoros"]              = "Egyptian",
     },
 }
 
@@ -168,7 +184,6 @@ local LAYOUT_MATRIX = {
         psep2_text        = "  ",
         psep3_text        = " ",
         ssep_text         = ":",
-        font_how_to_add = "How to add fonts",
     },
     ["ar"] = {
         header_order = {
@@ -191,7 +206,6 @@ local LAYOUT_MATRIX = {
         psep2_text        = "  ",
         psep3_text        = " ",
         ssep_text         = ":",
-        font_how_to_add = "كيفية إضافة الخطوط",
     },
 }
 

@@ -30,39 +30,74 @@ local MultiInputDialog = utils.MultiInputDialog
 local locations = {}
 local country_names_ar = {}
 
+local function getCustomLocationsPath()
+    return DataStorage:getSettingsDir() .. "/prayertimes_custom_locations.lua"
+end
+
 local function loadLocations()
-    local file = getPluginDir() .. "/locations.lua"
-    local ok_attr, attr = pcall(lfs.attributes, file)
+    local dist_file = getPluginDir() .. "/locations.lua"
+    local ok_attr, attr = pcall(lfs.attributes, dist_file)
     if ok_attr and attr and attr.mode == "file" then
-        local ok, result = pcall(function() return dofile(file) end)
+        local ok, result = pcall(function() return dofile(dist_file) end)
         if ok and type(result) == "table" and result.locations then
             locations = result.locations
             country_names_ar = result.country_names_ar or {}
-            return
         end
     end
-    locations = {
-        ["Egypt"] = {
-            { name = "Alexandria", name_ar = "الإسكندرية", lat = 31.198,  lng = 29.9192, tz = 2 },
-            { name = "Cairo",      name_ar = "القاهرة",    lat = 30.0444, lng = 31.2357, tz = 2 },
-        },
-        ["Saudi Arabia"] = {
-            { name = "Mecca",  name_ar = "مكة المكرمة",     lat = 21.4225, lng = 39.8262, tz = 3 },
-            { name = "Medina", name_ar = "المدينة المنورة", lat = 24.5247, lng = 39.5692, tz = 3 },
-        },
-    }
-    country_names_ar = {
-        ["Egypt"] = "مصر",
-        ["Saudi Arabia"] = "المملكة العربية السعودية",
-    }
+
+    if not next(locations) then
+        locations = {
+            ["Egypt"] = {
+                { name = "Alexandria", name_ar = "الإسكندرية", lat = 31.198, lng = 29.9192, tz = 2 },
+                { name = "Cairo", name_ar = "القاهرة", lat = 30.0444, lng = 31.2357, tz = 2 },
+            },
+            ["Saudi Arabia"] = {
+                { name = "Mecca", name_ar = "مكة المكرمة", lat = 21.4225, lng = 39.8262, tz = 3 },
+                { name = "Medina", name_ar = "المدينة المنورة", lat = 24.5247, lng = 39.5692, tz = 3 },
+            },
+        }
+        country_names_ar = {
+            ["Egypt"] = "مصر",
+            ["Saudi Arabia"] = "المملكة العربية السعودية",
+        }
+    end
+
+    local custom_file = getCustomLocationsPath()
+    local ok_ca, ca = pcall(lfs.attributes, custom_file)
+    if ok_ca and ca and ca.mode == "file" then
+        local ok, result = pcall(function() return dofile(custom_file) end)
+        if ok and type(result) == "table" and result.locations then
+            for country, cities in pairs(result.locations) do
+                locations[country] = locations[country] or {}
+                for _, new_city in ipairs(cities) do
+                    local exists = false
+                    for _, existing in ipairs(locations[country]) do
+                        if existing.name == new_city.name then
+                            exists = true
+                            break
+                        end
+                    end
+                    if not exists then
+                        table.insert(locations[country], new_city)
+                    end
+                end
+            end
+            for country, ar_name in pairs(result.country_names_ar or {}) do
+                if not country_names_ar[country] then
+                    country_names_ar[country] = ar_name
+                end
+            end
+        end
+    end
 end
 loadLocations()
 
 local function saveLocations()
     local ok, result = pcall(function()
-        local file_path = getPluginDir() .. "/locations.lua"
+        local file_path = getCustomLocationsPath()
         local f = io.open(file_path, "w")
         if not f then return false end
+        f:write("-- Prayer Times: Persistent user locations\n\n")
         f:write("local locations = {\n")
         for country, cities in pairs(locations) do
             f:write(string.format("    [%q] = {\n", country))
@@ -91,7 +126,6 @@ local function getSuggestedMethod(country)
     return nil
 end
 
--- Helper functions for font management
 local function getFontKey(display)
     if display.custom_font_path and display.custom_font_path ~= "" then
         return display.custom_font_path
@@ -173,21 +207,26 @@ function PrayerTimes:initLuaSettings()
             calculation = {
                 method = S.method,
                 asr_madhhab = S.asr_madhhab,
+                high_latitude_rule = S.high_latitude_rule,
+                high_latitude_minutes = S.high_latitude_minutes,
+                force_ramadan = S.force_ramadan,
+                adjustments = S.adjustments,
             },
             display = {
-                language              = S.language,
-                show_hijri            = S.show_hijri,
-                time_format           = S.time_format,
-                clock_mode            = S.clock_mode,
-                show_battery          = S.show_battery,
-                show_wifi             = S.show_wifi,
-                show_memory           = S.show_memory,
-                battery_format        = S.battery_format,
-                auto_show_resume      = S.auto_show_resume,
-                font_face             = S.font_face,
-                custom_font_path      = S.custom_font_path,
-                hijri_adjustment      = S.hijri_adjustment,
-                show_fasting_days     = S.show_fasting_days,
+                language = S.language,
+                show_hijri = S.show_hijri,
+                time_format = S.time_format,
+                clock_mode = S.clock_mode,
+                apply_dst_to_clock = S.apply_dst_to_clock,
+                show_battery = S.show_battery,
+                show_wifi = S.show_wifi,
+                show_memory = S.show_memory,
+                battery_format = S.battery_format,
+                auto_show_resume = S.auto_show_resume,
+                font_face = S.font_face,
+                custom_font_path = S.custom_font_path,
+                hijri_adjustment = S.hijri_adjustment,
+                show_fasting_days = S.show_fasting_days,
                 fasting_reminder_days = S.fasting_reminder_days,
                 fasting_days = {
                     mondays = true, thursdays = true, white_days = true,
@@ -224,6 +263,17 @@ function PrayerTimes:ensureSettingsComplete()
     local calc = self.settings.calculation or {}
     calc.method      = calc.method      or S.method
     calc.asr_madhhab = calc.asr_madhhab or S.asr_madhhab
+    calc.high_latitude_rule = calc.high_latitude_rule or S.high_latitude_rule or "none"
+    calc.high_latitude_minutes = tonumber(calc.high_latitude_minutes) or S.high_latitude_minutes or 90
+    if calc.force_ramadan == nil then calc.force_ramadan = S.force_ramadan end
+    calc.adjustments = calc.adjustments or S.adjustments or {}
+    local adj = calc.adjustments
+    adj.fajr    = tonumber(adj.fajr)    or 0
+    adj.sunrise = tonumber(adj.sunrise) or 0
+    adj.dhuhr   = tonumber(adj.dhuhr)   or 0
+    adj.asr     = tonumber(adj.asr)     or 0
+    adj.maghrib = tonumber(adj.maghrib) or 0
+    adj.isha    = tonumber(adj.isha)    or 0
     self.settings.calculation = calc
 
     local d = self.settings.display or {}
@@ -231,6 +281,7 @@ function PrayerTimes:ensureSettingsComplete()
     if d.show_hijri == nil then d.show_hijri = S.show_hijri end
     d.time_format = tonumber(d.time_format) or S.time_format
     d.clock_mode  = d.clock_mode or S.clock_mode
+    if d.apply_dst_to_clock == nil then d.apply_dst_to_clock = S.apply_dst_to_clock or false end
     if d.show_battery == nil then d.show_battery = S.show_battery end
     if d.show_wifi    == nil then d.show_wifi    = S.show_wifi end
     if d.show_memory  == nil then d.show_memory  = S.show_memory end
@@ -291,6 +342,18 @@ function PrayerTimes:flushSettings()
     pcall(function() self.local_storage:flush() end)
 end
 
+function PrayerTimes:getCalculationOptions()
+    local calc = self.settings.calculation or {}
+    local disp = self.settings.display or {}
+    return {
+        hijri_adjustment = disp.hijri_adjustment or 0,
+        force_ramadan = calc.force_ramadan,
+        high_latitude_rule = calc.high_latitude_rule or "none",
+        high_latitude_minutes = calc.high_latitude_minutes or 90,
+        adjustments = calc.adjustments or {},
+    }
+end
+
 function PrayerTimes:previewFont(font_key, is_builtin)
     local display = self.settings.display
     local lang = display.language or "en"
@@ -307,17 +370,27 @@ function PrayerTimes:previewFont(font_key, is_builtin)
     end
 
     local now = os.time()
-    local today = os.date("*t", now)
+    local display_now = self:getDisplayNow(now)
+    local today = os.date("*t", display_now)
     local loc = self.settings.location
     local dst = loc.dst_offset or 0
     local tz  = (loc.timezone or 0) + dst
 
-    local times = calculateTimes(
+    local times, calc_err = calculateTimes(
         today.year, today.month, today.day,
         loc.latitude, loc.longitude, tz,
         self.settings.calculation.method,
-        self.settings.calculation.asr_madhhab
+        self.settings.calculation.asr_madhhab,
+        self:getCalculationOptions()
     )
+
+    if not times then
+        UIManager:show(InfoMessage:new{
+            text = interp(self:t("calc_error"), tostring(calc_err)),
+            timeout = 6,
+        })
+        return
+    end
 
     local hijri_date
     if display.show_hijri then
@@ -362,10 +435,10 @@ function PrayerTimes:previewFont(font_key, is_builtin)
             next_prayer = next_prayer,
             hijri = hijri_date,
             location_name = display_name,
-            on_apply_font = function(offset, fkey, fbuiltin, lang)
+            on_apply_font = function(offset, fkey, fbuiltin, flang)
                 display.font_sizes = display.font_sizes or { ar = {}, en = {} }
-                display.font_sizes[lang] = display.font_sizes[lang] or {}
-                display.font_sizes[lang][fkey] = offset
+                display.font_sizes[flang] = display.font_sizes[flang] or {}
+                display.font_sizes[flang][fkey] = offset
                 setFont(display, fkey, fbuiltin)
                 self:flushSettings()
             end,
@@ -375,16 +448,22 @@ end
 
 function PrayerTimes:applyFont(font_key, is_builtin)
     local display = self.settings.display
-    local lang = display.language or "en"
-    local saved_offset = getSavedFontOffset(display, font_key, lang)
-    if saved_offset then
-        -- keep per-font size, nothing else needed
-    end
     setFont(display, font_key, is_builtin)
     self:flushSettings()
     UIManager:show(InfoMessage:new{
         text = self:t("font_applied"), timeout = 3
     })
+end
+
+function PrayerTimes:getDisplayNow(system_now)
+    system_now = tonumber(system_now) or os.time()
+    local display = self.settings.display or {}
+    if display.apply_dst_to_clock then
+        local loc = self.settings.location or {}
+        local dst = tonumber(loc.dst_offset) or 0
+        return system_now + dst * 3600
+    end
+    return system_now
 end
 
 function PrayerTimes:addToMainMenu(menu_items)
@@ -417,6 +496,7 @@ function PrayerTimes:getLocationSubmenu()
                 { text = self:t("add_1_hour"), checked_func = function() return self.settings.location.dst_offset == 1 end, callback = function() self.settings.location.dst_offset = 1; self:flushSettings() end },
                 { text = self:t("add_2_hours"), checked_func = function() return self.settings.location.dst_offset == 2 end, callback = function() self.settings.location.dst_offset = 2; self:flushSettings() end },
                 { text = self:t("subtract_1_hour"), checked_func = function() return self.settings.location.dst_offset == -1 end, callback = function() self.settings.location.dst_offset = -1; self:flushSettings() end },
+                { text = self:t("apply_dst_to_clock"), checked_func = function() return self.settings.display.apply_dst_to_clock == true end, callback = function() self.settings.display.apply_dst_to_clock = not self.settings.display.apply_dst_to_clock; self:flushSettings(); UIManager:show(InfoMessage:new{ text = self:t("apply_dst_to_clock_info"), timeout = 6 }) end },
             },
         },
     }
@@ -424,13 +504,15 @@ end
 
 function PrayerTimes:getCalculationSubmenu()
     local method_list = {
-        { key = "MWL", tkey = "mwl" },
-        { key = "Egyptian", tkey = "egyptian" },
-        { key = "UmmAlQura", tkey = "ummalqura" },
-        { key = "Karachi", tkey = "karachi" },
-        { key = "ISNA", tkey = "isna" },
-        { key = "Jafari", tkey = "jafari" },
-        { key = "Tehran", tkey = "tehran" },
+        { key = "IACStandard", tkey = "iac_standard" },
+        { key = "MWL",         tkey = "mwl" },
+        { key = "Egyptian",    tkey = "egyptian" },
+        { key = "Moroccan",    tkey = "moroccan" },
+        { key = "UmmAlQura",   tkey = "ummalqura" },
+        { key = "Karachi",     tkey = "karachi" },
+        { key = "ISNA",        tkey = "isna" },
+        { key = "Tehran",      tkey = "tehran" },
+        { key = "Jafari",      tkey = "jafari" },
     }
     local method_items = {}
     for _, m in ipairs(method_list) do
@@ -440,12 +522,49 @@ function PrayerTimes:getCalculationSubmenu()
             callback = function() self.settings.calculation.method = m.key; self:flushSettings() end,
         }
     end
+
+    local hl_items = {
+        { text = self:t("high_latitude_none"), checked_func = function() return self.settings.calculation.high_latitude_rule == "none" end, callback = function() self.settings.calculation.high_latitude_rule = "none"; self:flushSettings() end },
+        { text = self:t("high_latitude_seventh"), checked_func = function() return self.settings.calculation.high_latitude_rule == "seventh" end, callback = function() self.settings.calculation.high_latitude_rule = "seventh"; self:flushSettings() end },
+        { text = self:t("high_latitude_middle"), checked_func = function() return self.settings.calculation.high_latitude_rule == "middle" end, callback = function() self.settings.calculation.high_latitude_rule = "middle"; self:flushSettings() end },
+        { text = self:t("high_latitude_angle"), checked_func = function() return self.settings.calculation.high_latitude_rule == "angle_based" end, callback = function() self.settings.calculation.high_latitude_rule = "angle_based"; self:flushSettings() end },
+        { text = self:t("high_latitude_fixed"), checked_func = function() return self.settings.calculation.high_latitude_rule == "fixed_minutes" end, callback = function() self.settings.calculation.high_latitude_rule = "fixed_minutes"; self:flushSettings() end },
+    }
+
+    local adj = self.settings.calculation.adjustments or {}
+    local adj_items = {}
+    local prayer_keys = { "fajr", "sunrise", "dhuhr", "asr", "maghrib", "isha" }
+    for _, pk in ipairs(prayer_keys) do
+        local tkey = pk .. "_adjustment"
+        adj_items[#adj_items+1] = {
+            text = self:t(tkey) .. ": " .. tostring(adj[pk] or 0),
+            callback = function()
+                local SpinWidget = require("ui/widget/spinwidget")
+                UIManager:show(SpinWidget:new{
+                    value = adj[pk] or 0,
+                    value_min = -30,
+                    value_max = 30,
+                    value_step = 1,
+                    ok_text = self:t("save"),
+                    title_text = self:t(tkey),
+                    callback = function(spin)
+                        adj[pk] = spin.value
+                        self.settings.calculation.adjustments = adj
+                        self:flushSettings()
+                    end,
+                })
+            end,
+        }
+    end
+
     return {
         { text = self:t("calculation_method"), sub_item_table = method_items },
         { text = self:t("asr_madhhab"), sub_item_table = {
             { text = self:t("shafi"), checked_func = function() return self.settings.calculation.asr_madhhab == "Shafi" end, callback = function() self.settings.calculation.asr_madhhab = "Shafi"; self:flushSettings() end },
             { text = self:t("hanafi"), checked_func = function() return self.settings.calculation.asr_madhhab == "Hanafi" end, callback = function() self.settings.calculation.asr_madhhab = "Hanafi"; self:flushSettings() end },
         }},
+        { text = self:t("high_latitude_title"), sub_item_table = hl_items },
+        { text = self:t("prayer_adjustments"), sub_item_table = adj_items },
     }
 end
 
@@ -455,7 +574,12 @@ function PrayerTimes:getHijriAndFastingSubmenu()
     end
     return {
         { text = self:t("show_hijri"), checked_func = function() return self.settings.display.show_hijri end, callback = function() self.settings.display.show_hijri = not self.settings.display.show_hijri; self:flushSettings() end },
-        { text = self:t("hijri_adjustment"), sub_item_table = { adjItem(-2, "-2 " .. self:t("days")), adjItem(-1, "-1 " .. self:t("day")), adjItem(0, "0 (" .. self:t("default_val") .. ")"), adjItem(1, "+1 " .. self:t("day")), adjItem(2, "+2 " .. self:t("days")) } },
+        { text = self:t("hijri_adjustment"), sub_item_table = { adjItem(-3, "-3 " .. self:t("days")), adjItem(-2, "-2 " .. self:t("days")), adjItem(-1, "-1 " .. self:t("day")), adjItem(0, "0 (" .. self:t("default_val") .. ")"), adjItem(1, "+1 " .. self:t("day")), adjItem(2, "+2 " .. self:t("days")), adjItem(3, "+3 " .. self:t("days")) } },
+        { text = self:t("force_ramadan_title"), sub_item_table = {
+            { text = self:t("force_ramadan_auto"), checked_func = function() return self.settings.calculation.force_ramadan == nil end, callback = function() self.settings.calculation.force_ramadan = nil; self:flushSettings() end },
+            { text = self:t("force_ramadan_yes"), checked_func = function() return self.settings.calculation.force_ramadan == true end, callback = function() self.settings.calculation.force_ramadan = true; self:flushSettings() end },
+            { text = self:t("force_ramadan_no"), checked_func = function() return self.settings.calculation.force_ramadan == false end, callback = function() self.settings.calculation.force_ramadan = false; self:flushSettings() end },
+        }},
         { text = self:t("show_fasting_days"), checked_func = function() return self.settings.display.show_fasting_days end, callback = function() self.settings.display.show_fasting_days = not self.settings.display.show_fasting_days; self:flushSettings() end },
         { text = self:t("fasting_reminder_days"), sub_item_table = {
             { text = self:t("fasting_reminder_0"), checked_func = function() return (self.settings.display.fasting_reminder_days or 1) == 0 end, callback = function() self.settings.display.fasting_reminder_days = 0; self:flushSettings() end },
@@ -488,9 +612,7 @@ function PrayerTimes:getFontSubmenu()
                 local d = self.settings.display
                 return (d.custom_font_path or "") == "" and (d.font_face or DEFAULTS.default_face) == name
             end,
-            callback = function()
-                self:previewFont(name, true)
-            end,
+            callback = function() self:previewFont(name, true) end,
         }
     end
     items[#items+1] = { text = self:t("font_face_builtin"), sub_item_table = builtin_items }
@@ -562,16 +684,27 @@ end
 function PrayerTimes:showPrayerTimes()
     local ok, err = pcall(function()
         local now = os.time()
-        local today = os.date("*t", now)
+        local display_now = self:getDisplayNow(now)
+        local today = os.date("*t", display_now)
         local loc = self.settings.location
         local dst = loc.dst_offset or 0
         local tz  = (loc.timezone or 0) + dst
 
-        local times = calculateTimes(
+        local times, calc_err = calculateTimes(
             today.year, today.month, today.day,
             loc.latitude, loc.longitude, tz,
             self.settings.calculation.method,
-            self.settings.calculation.asr_madhhab)
+            self.settings.calculation.asr_madhhab,
+            self:getCalculationOptions()
+        )
+
+        if not times then
+            UIManager:show(InfoMessage:new{
+                text = interp(self:t("calc_error"), tostring(calc_err)),
+                timeout = 8,
+            })
+            return
+        end
 
         local hijri_date
         if self.settings.display.show_hijri then
@@ -625,6 +758,9 @@ function PrayerTimes:showPrayerTimes()
 end
 
 function PrayerTimes:getNextPrayer(times, system_now)
+    system_now = tonumber(system_now) or os.time()
+    if type(times) ~= "table" then return nil end
+
     local order = {
         { key = "fajr",    time = times.fajr },
         { key = "sunrise", time = times.sunrise },
@@ -634,40 +770,71 @@ function PrayerTimes:getNextPrayer(times, system_now)
         { key = "isha",    time = times.isha },
     }
 
-    local today = os.date("*t", system_now)
-    local dst = self.settings.location.dst_offset or 0
+    local loc = self.settings.location or {}
+    local calc = self.settings.calculation or {}
+    local display = self.settings.display or {}
+    local dst = tonumber(loc.dst_offset) or 0
+    local apply_dst = display.apply_dst_to_clock == true
+
+    local display_now = system_now
+    if apply_dst then
+        display_now = display_now + dst * 3600
+    end
+
+    local today = os.date("*t", display_now)
 
     local function toSystemTime(hhmm, date_table)
-        local h, m = hhmm:match("(%d+):(%d+)")
-        h = (tonumber(h) or 0) - dst
-        m = tonumber(m) or 0
+        if type(hhmm) ~= "string" or type(date_table) ~= "table" then
+            return nil
+        end
+        local h, m = hhmm:match("^(%d%d?):(%d%d)$")
+        h = tonumber(h)
+        m = tonumber(m)
+        if not h or not m or h < 0 or h > 23 or m < 0 or m > 59 then
+            return nil
+        end
         local midnight = os.time{
             year = date_table.year, month = date_table.month,
             day = date_table.day, hour = 0, min = 0, sec = 0,
         }
-        return midnight + h * 3600 + m * 60
+        local timestamp = midnight + h * 3600 + m * 60
+        if apply_dst then
+            timestamp = timestamp - dst * 3600
+        end
+        return timestamp
     end
 
     for _, p in ipairs(order) do
         local ts = toSystemTime(p.time, today)
-        if ts > system_now then
+        if ts and ts > system_now then
             return { key = p.key, name = p.key, timestamp = ts }
         end
     end
 
-    local tomorrow = os.date("*t", system_now + 86400)
-    local tt = calculateTimes(
+    local tomorrow_noon = os.time{
+        year = today.year, month = today.month,
+        day = today.day + 1, hour = 12, min = 0, sec = 0,
+    }
+    local tomorrow = os.date("*t", tomorrow_noon)
+
+    local tomorrow_times, _ = calculateTimes(
         tomorrow.year, tomorrow.month, tomorrow.day,
-        self.settings.location.latitude,
-        self.settings.location.longitude,
-        (self.settings.location.timezone or 0) + dst,
-        self.settings.calculation.method,
-        self.settings.calculation.asr_madhhab)
+        tonumber(loc.latitude) or 31.198,
+        tonumber(loc.longitude) or 29.9192,
+        (tonumber(loc.timezone) or 0) + dst,
+        calc.method or DEFAULTS.settings.method,
+        calc.asr_madhhab or DEFAULTS.settings.asr_madhhab,
+        self:getCalculationOptions()
+    )
+
+    if not tomorrow_times then
+        return nil
+    end
 
     return {
         key = "fajr",
         name = "fajr",
-        timestamp = toSystemTime(tt.fajr, tomorrow),
+        timestamp = toSystemTime(tomorrow_times.fajr, tomorrow),
     }
 end
 
