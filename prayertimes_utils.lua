@@ -1,4 +1,4 @@
--- utils.lua
+-- prayertimes_utils.lua
 local WidgetContainer   = require("ui/widget/container/widgetcontainer")
 local UIManager         = require("ui/uimanager")
 local DataStorage       = require("datastorage")
@@ -28,7 +28,7 @@ local lfs               = require("libs/libkoreader-lfs")
 local Device            = require("device")
 local logger            = require("logger")
 
-local defaults = require("defaults")
+local defaults = require("prayertimes_defaults")
 local DEFAULTS = defaults.DEFAULTS
 
 local _fonts_dir_registered = false
@@ -75,11 +75,11 @@ end
 
 local StatusUtils = nil
 do
-    local ok, mod = pcall(function() return require("statusutils") end)
+    local ok, mod = pcall(function() return require("prayertimes_statusutils") end)
     if ok and mod then
         StatusUtils = mod
     else
-        local path = getPluginDir() .. "/statusutils.lua"
+        local path = getPluginDir() .. "/prayertimes_statusutils.lua"
         local ok_attr, attr = pcall(lfs.attributes, path)
         if ok_attr and attr and attr.mode == "file" then
             local ok2, mod2 = pcall(function() return dofile(path) end)
@@ -99,8 +99,8 @@ local function getBatteryText(format)
         if ok2 then powerd = pd end
     end
     if powerd and powerd.getCapacity then
-        local ok3, cap = pcall(powerd.getCapacity, powerd)
-        if ok3 and cap then return string.format("%d%%", cap) end
+        local ok3, MathCap = pcall(powerd.getCapacity, powerd)
+        if ok3 and MathCap then return string.format("%d%%", MathCap) end
     end
     return nil
 end

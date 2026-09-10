@@ -1,4 +1,4 @@
--- translations.lua
+-- prayertimes_translations.lua
 local translations = {
     en = {
         prayer_times = "Prayer Times",

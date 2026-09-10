@@ -1,9 +1,9 @@
--- widget.lua
-local utils = require("utils")
-local defaults = require("defaults")
-local translations = require("translations")
-local calculation = require("calculation")
-local fasting = require("fasting")
+-- prayertimes_widget.lua
+local utils = require("prayertimes_utils")
+local defaults = require("prayertimes_defaults")
+local translations = require("prayertimes_translations")
+local calculation = require("prayertimes_calculation")
+local fasting = require("prayertimes_fasting")
 
 local DEFAULTS = defaults.DEFAULTS
 local LAYOUT_MATRIX = defaults.LAYOUT_MATRIX
@@ -49,11 +49,6 @@ local interp = utils.interp
 local getActiveLayout = utils.getActiveLayout
 local makeFixedCell = utils.makeFixedCell
 
--- -----------------------------------------------------------------------------
--- Arabic Digit Translation Helper
--- Converts standard Western digits (1, 2, 3...) to Arabic-Indic digits (١, ٢, ٣...)
--- when the interface is set to Arabic, maintaining traditional regional formatting.
--- -----------------------------------------------------------------------------
 local arabic_digits = {
     ["0"] = "٠",
     ["1"] = "١",
@@ -100,7 +95,7 @@ function PrayerTimesWidget:init()
     self.next_prayer_timestamp = (self.props.next_prayer and self.props.next_prayer.timestamp) or nil
 
     self.is_preview = (self.props.preview_font ~= nil)
-    self.show_controls = self.is_preview  -- show overlay initially in preview
+    self.show_controls = self.is_preview
 
     if self.is_preview then
         self.body_face = self.props.preview_font
@@ -162,7 +157,6 @@ function PrayerTimesWidget:init()
 
     if not self.is_preview then
         pcall(function()
-            -- Initial render gets a full clean display refresh to wipe away book rendering
             UIManager:setDirty("all", "full")
             self:setupScheduling()
             self:applyWidgetBrightness()
@@ -193,11 +187,6 @@ function PrayerTimesWidget:onTapClose()
 end
 PrayerTimesWidget.onAnyKeyPressed = PrayerTimesWidget.onTapClose
 
--- -----------------------------------------------------------------------------
--- Lifecycle Teardown Implementation
--- Cleanly closes the widget and ensures timers are unscheduled and system
--- brightness is fully restored to prevent lock-ins or CPU resource leaks.
--- -----------------------------------------------------------------------------
 function PrayerTimesWidget:onCloseWidget()
     self.is_closing = true
     self:unscheduleTimers()
@@ -260,11 +249,6 @@ function PrayerTimesWidget:getSuffix(time_str)
     return ""
 end
 
--- -----------------------------------------------------------------------------
--- Kindle Local Clock Sync & Optional DST offset
--- When 'apply_dst_to_clock' is enabled, the manual DST offset (+1, +2, -1)
--- is added directly to the displayed clock. Otherwise, it matches the device's clock.
--- -----------------------------------------------------------------------------
 function PrayerTimesWidget:getAdjustedNow()
     local now = os.time()
     local settings = self.props.settings or {}
@@ -315,11 +299,6 @@ function PrayerTimesWidget:setupScheduling()
     end
 end
 
--- -----------------------------------------------------------------------------
--- Smooth E-ink Refresh Strategy
--- Uses lightweight `"ui"` updates for standard background minute refreshes.
--- This completely prevents physical screen flashing/flicker on e-ink e-readers.
--- -----------------------------------------------------------------------------
 function PrayerTimesWidget:refresh()
     local ok, err = pcall(function()
         self:render()
@@ -729,7 +708,6 @@ function PrayerTimesWidget:render()
         vgroup[#vgroup+1] = bottom_w
     end
 
-    -- Build the main frame
     local main_frame = FrameContainer:new{
         vgroup,
         width = screen_size.w,

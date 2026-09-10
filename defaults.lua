@@ -1,6 +1,0 @@
-        country_hint    = "e.g., Egypt",
-        country_ar_hint = "مثال: مصر",
-        city_hint       = "e.g., Cairo",
-        city_ar_hint    = "مثال: القاهرة",
-        latitude_hint   = "مثال: 30.0444",
-        longitude_hint  = "مثال: 31.2357",

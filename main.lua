@@ -7,12 +7,12 @@ local lfs = require("libs/libkoreader-lfs")
 local Device = require("device")
 local logger = require("logger")
 
-local defaults = require("defaults")
-local translations = require("translations")
-local utils = require("utils")
-local calculation = require("calculation")
-local fasting = require("fasting")
-local PrayerTimesWidget = require("widget")
+local defaults = require("prayertimes_defaults")
+local translations = require("prayertimes_translations")
+local utils = require("prayertimes_utils")
+local calculation = require("prayertimes_calculation")
+local fasting = require("prayertimes_fasting")
+local PrayerTimesWidget = require("prayertimes_widget")
 
 local DEFAULTS = defaults.DEFAULTS
 local translations_table = translations.translations
@@ -64,7 +64,6 @@ end
 
 -- -----------------------------------------------------------------------------
 -- Custom Locations Sandboxing
--- Saves custom cities in persistent settings rather than overwrite distribution files
 -- -----------------------------------------------------------------------------
 local function getCustomLocationsPath()
     return DataStorage:getSettingsDir() .. "/prayertimes_custom_locations.lua"
@@ -166,7 +165,7 @@ local function getSuggestedAsrMadhhab(country)
     if country and DEFAULTS.region_madhhabs[country] then
         return DEFAULTS.region_madhhabs[country]
     end
-    return "Shafi" -- Default standard fallback for most of the Islamic world
+    return "Shafi"
 end
 
 local function getFontKey(display)
@@ -804,6 +803,9 @@ function PrayerTimes:getDisplaySubmenu()
     }
 end
 
+-- -----------------------------------------------------------------------------
+-- Alerts Submenu (Restored)
+-- -----------------------------------------------------------------------------
 function PrayerTimes:getAlertsSubmenu()
     return {
         { text = self:t("flash_screen"), checked_func = function() return self.settings.alerts.flash end, callback = function() self.settings.alerts.flash = not self.settings.alerts.flash; self:flushSettings() end },
