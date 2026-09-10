@@ -30,12 +30,9 @@ local MultiInputDialog = utils.MultiInputDialog
 local locations = {}
 local country_names_ar = {}
 
-local function getCustomLocationsPath()
-    return DataStorage:getSettingsDir() .. "/prayertimes_custom_locations.lua"
-end
-
--- Translates a stored English method key like "Egyptian" or "UmmAlQura"
--- into the user's current interface language for display purposes.
+-- -----------------------------------------------------------------------------
+-- Submenu display text helpers
+-- -----------------------------------------------------------------------------
 local method_translation_keys = {
     ["IACStandard"] = "iac_standard",
     ["MWL"]         = "mwl",
@@ -56,6 +53,22 @@ local function getMethodDisplayName(self, method_key)
     return method_key or ""
 end
 
+local function getAsrMadhhabDisplayName(self, madhhab_key)
+    if madhhab_key == "Hanafi" then
+        return self:t("hanafi")
+    elseif madhhab_key == "Shafi" then
+        return self:t("shafi")
+    end
+    return madhhab_key or ""
+end
+
+-- -----------------------------------------------------------------------------
+-- Custom Locations Sandboxing
+-- Saves custom cities in persistent settings rather than overwrite distribution files
+-- -----------------------------------------------------------------------------
+local function getCustomLocationsPath()
+    return DataStorage:getSettingsDir() .. "/prayertimes_custom_locations.lua"
+end
 
 local function loadLocations()
     local dist_file = getPluginDir() .. "/locations.lua"
@@ -86,8 +99,8 @@ local function loadLocations()
     end
 
     local custom_file = getCustomLocationsPath()
-    local ok_ca, ca = pcall(lfs.attributes, custom_file)
-    if ok_ca and ca and ca.mode == "file" then
+    local ok_custom_attr, custom_attr = pcall(lfs.attributes, custom_file)
+    if ok_custom_attr and custom_attr and custom_attr.mode == "file" then
         local ok, result = pcall(function() return dofile(custom_file) end)
         if ok and type(result) == "table" and result.locations then
             for country, cities in pairs(result.locations) do
@@ -147,6 +160,13 @@ local function getSuggestedMethod(country)
         return DEFAULTS.region_methods[country]
     end
     return nil
+end
+
+local function getSuggestedAsrMadhhab(country)
+    if country and DEFAULTS.region_madhhabs[country] then
+        return DEFAULTS.region_madhhabs[country]
+    end
+    return "Shafi" -- Default standard fallback for most of the Islamic world
 end
 
 local function getFontKey(display)
@@ -236,20 +256,20 @@ function PrayerTimes:initLuaSettings()
                 adjustments = S.adjustments,
             },
             display = {
-                language = S.language,
-                show_hijri = S.show_hijri,
-                time_format = S.time_format,
-                clock_mode = S.clock_mode,
-                apply_dst_to_clock = S.apply_dst_to_clock,
-                show_battery = S.show_battery,
-                show_wifi = S.show_wifi,
-                show_memory = S.show_memory,
-                battery_format = S.battery_format,
-                auto_show_resume = S.auto_show_resume,
-                font_face = S.font_face,
-                custom_font_path = S.custom_font_path,
-                hijri_adjustment = S.hijri_adjustment,
-                show_fasting_days = S.show_fasting_days,
+                language              = S.language,
+                show_hijri            = S.show_hijri,
+                time_format           = S.time_format,
+                clock_mode            = S.clock_mode,
+                apply_dst_to_clock    = S.apply_dst_to_clock,
+                show_battery          = S.show_battery,
+                show_wifi             = S.show_wifi,
+                show_memory           = S.show_memory,
+                battery_format        = S.battery_format,
+                auto_show_resume      = S.auto_show_resume,
+                font_face             = S.font_face,
+                custom_font_path      = S.custom_font_path,
+                hijri_adjustment      = S.hijri_adjustment,
+                show_fasting_days     = S.show_fasting_days,
                 fasting_reminder_days = S.fasting_reminder_days,
                 fasting_days = {
                     mondays = true, thursdays = true, white_days = true,
@@ -545,8 +565,7 @@ function PrayerTimes:getCalculationSubmenu()
         method_items[#method_items + 1] = {
             text = self:t(m.tkey),
             checked_func = function()
-                return self.settings.calculation.method
-                    == m.key
+                return self.settings.calculation.method == m.key
             end,
             callback = function()
                 self.settings.calculation.method = m.key
@@ -555,14 +574,39 @@ function PrayerTimes:getCalculationSubmenu()
         }
     end
 
-    -- High-latitude submenu with a clear explanation entry.
-    -- Normal users can safely ignore this menu.
+    local hl_explanation
+    if lang == "ar" then
+        hl_explanation =
+            "في بعض الدول الشمالية (مثل النرويج، السويد، آيسلندا)\n"
+            .. "قد لا يغيب الشفق في الصيف أو لا تشرق الشمس في الشتاء.\n\n"
+            .. "في هذه الحالة لا يمكن حساب وقت الفجر أو العشاء فلكياً.\n\n"
+            .. "هذا الخيار يحدد كيف يتم تقدير الأوقات عند غياب العلامة الفلكية:\n\n"
+            .. "• الأوقات الحقيقية فقط: لا يتم التقدير (يظهر --:--)\n"
+            .. "• سُبع الليل: الفجر = الشروق - سُبع الليل\n"
+            .. "• منتصف الليل: الفجر = الشروق - نصف الليل\n"
+            .. "• حسب الزاوية: جزء من الليل بناء على زاوية الصلاة\n"
+            .. "• دقائق ثابتة: فترة ثابتة قبل الشروق أو بعد الغروب\n\n"
+            .. "إذا كنت في منطقة عربية أو إسلامية عادية، لا تحتاج لتغيير هذا الخيار."
+    else
+        hl_explanation =
+            "In some northern countries (e.g., Norway, Sweden, Iceland)\n"
+            .. "twilight may not end in summer or the sun may not rise in winter.\n\n"
+            .. "When this happens, Fajr or Isha cannot be calculated astronomically.\n\n"
+            .. "This setting determines how to estimate times when the sign is absent:\n\n"
+            .. "• Real times only: No estimation (shows --:--)\n"
+            .. "• One-seventh of night: Fajr = Sunrise - 1/7 night\n"
+            .. "• Middle of night: Fajr = Sunrise - 1/2 night\n"
+            .. "• Angle-based: Portion of night based on prayer angle\n"
+            .. "• Fixed minutes: Fixed interval before sunrise/after sunset\n\n"
+            .. "If you are in a normal Arab or Islamic country, you do not need to change this."
+    end
+
     local hl_items = {
         {
             text = "ℹ️  " .. self:t("high_latitude_what_is_this"),
             callback = function()
                 UIManager:show(InfoMessage:new{
-                    text = self:t("high_latitude_explanation"),
+                    text = hl_explanation,
                     timeout = 30,
                 })
             end,
@@ -570,87 +614,64 @@ function PrayerTimes:getCalculationSubmenu()
         {
             text = self:t("high_latitude_none"),
             checked_func = function()
-                return self.settings.calculation
-                    .high_latitude_rule == "none"
+                return self.settings.calculation.high_latitude_rule == "none"
             end,
             callback = function()
-                self.settings.calculation
-                    .high_latitude_rule = "none"
+                self.settings.calculation.high_latitude_rule = "none"
                 self:flushSettings()
             end,
         },
         {
             text = self:t("high_latitude_seventh"),
             checked_func = function()
-                return self.settings.calculation
-                    .high_latitude_rule == "seventh"
+                return self.settings.calculation.high_latitude_rule == "seventh"
             end,
             callback = function()
-                self.settings.calculation
-                    .high_latitude_rule = "seventh"
+                self.settings.calculation.high_latitude_rule = "seventh"
                 self:flushSettings()
             end,
         },
         {
             text = self:t("high_latitude_middle"),
             checked_func = function()
-                return self.settings.calculation
-                    .high_latitude_rule == "middle"
+                return self.settings.calculation.high_latitude_rule == "middle"
             end,
             callback = function()
-                self.settings.calculation
-                    .high_latitude_rule = "middle"
+                self.settings.calculation.high_latitude_rule = "middle"
                 self:flushSettings()
             end,
         },
         {
             text = self:t("high_latitude_angle"),
             checked_func = function()
-                return self.settings.calculation
-                    .high_latitude_rule == "angle_based"
+                return self.settings.calculation.high_latitude_rule == "angle_based"
             end,
             callback = function()
-                self.settings.calculation
-                    .high_latitude_rule = "angle_based"
+                self.settings.calculation.high_latitude_rule = "angle_based"
                 self:flushSettings()
             end,
         },
         {
             text = self:t("high_latitude_fixed"),
             checked_func = function()
-                return self.settings.calculation
-                    .high_latitude_rule == "fixed_minutes"
+                return self.settings.calculation.high_latitude_rule == "fixed_minutes"
             end,
             callback = function()
-                self.settings.calculation
-                    .high_latitude_rule = "fixed_minutes"
+                self.settings.calculation.high_latitude_rule = "fixed_minutes"
                 self:flushSettings()
             end,
         },
     }
 
-    -- Per-prayer manual corrections
     local adj = self.settings.calculation.adjustments or {}
     local adj_items = {}
-    local prayer_keys = {
-        "fajr",
-        "sunrise",
-        "dhuhr",
-        "asr",
-        "maghrib",
-        "isha",
-    }
-
+    local prayer_keys = { "fajr", "sunrise", "dhuhr", "asr", "maghrib", "isha" }
     for _, pk in ipairs(prayer_keys) do
         local tkey = pk .. "_adjustment"
-        adj_items[#adj_items + 1] = {
-            text = self:t(tkey)
-                .. ": "
-                .. tostring(adj[pk] or 0),
+        adj_items[#adj_items+1] = {
+            text = self:t(tkey) .. ": " .. tostring(adj[pk] or 0),
             callback = function()
-                local SpinWidget =
-                    require("ui/widget/spinwidget")
-
+                local SpinWidget = require("ui/widget/spinwidget")
                 UIManager:show(SpinWidget:new{
                     value = adj[pk] or 0,
                     value_min = -30,
@@ -660,8 +681,7 @@ function PrayerTimes:getCalculationSubmenu()
                     title_text = self:t(tkey),
                     callback = function(spin)
                         adj[pk] = spin.value
-                        self.settings.calculation
-                            .adjustments = adj
+                        self.settings.calculation.adjustments = adj
                         self:flushSettings()
                     end,
                 })
@@ -670,49 +690,16 @@ function PrayerTimes:getCalculationSubmenu()
     end
 
     return {
-        {
-            text = self:t("calculation_method"),
-            sub_item_table = method_items,
-        },
-        {
-            text = self:t("asr_madhhab"),
-            sub_item_table = {
-                {
-                    text = self:t("shafi"),
-                    checked_func = function()
-                        return self.settings.calculation
-                            .asr_madhhab == "Shafi"
-                    end,
-                    callback = function()
-                        self.settings.calculation
-                            .asr_madhhab = "Shafi"
-                        self:flushSettings()
-                    end,
-                },
-                {
-                    text = self:t("hanafi"),
-                    checked_func = function()
-                        return self.settings.calculation
-                            .asr_madhhab == "Hanafi"
-                    end,
-                    callback = function()
-                        self.settings.calculation
-                            .asr_madhhab = "Hanafi"
-                        self:flushSettings()
-                    end,
-                },
-            },
-        },
-        {
-            text = self:t("prayer_adjustments"),
-            sub_item_table = adj_items,
-        },
-        {
-            text = self:t("high_latitude_title"),
-            sub_item_table = hl_items,
-        },
+        { text = self:t("calculation_method"), sub_item_table = method_items },
+        { text = self:t("asr_madhhab"), sub_item_table = {
+            { text = self:t("shafi"), checked_func = function() return self.settings.calculation.asr_madhhab == "Shafi" end, callback = function() self.settings.calculation.asr_madhhab = "Shafi"; self:flushSettings() end },
+            { text = self:t("hanafi"), checked_func = function() return self.settings.calculation.asr_madhhab == "Hanafi" end, callback = function() self.settings.calculation.asr_madhhab = "Hanafi"; self:flushSettings() end },
+        }},
+        { text = self:t("prayer_adjustments"), sub_item_table = adj_items },
+        { text = self:t("high_latitude_title"), sub_item_table = hl_items },
     }
 end
+
 function PrayerTimes:getHijriAndFastingSubmenu()
     local function adjItem(value, label)
         return { text = label, checked_func = function() return self.settings.display.hijri_adjustment == value end, callback = function() self.settings.display.hijri_adjustment = value; self:flushSettings() end }
@@ -1061,7 +1048,6 @@ function PrayerTimes:showLocationList()
 
             if #city_items > 0 then
                 if filter_lower ~= "" then
-                    -- Flatten matches so all appear together
                     for _, ci in ipairs(city_items) do
                         ci.text =
                             ci.text
@@ -1071,7 +1057,6 @@ function PrayerTimes:showLocationList()
                         items[#items + 1] = ci
                     end
                 else
-                    -- Normal nested view with count
                     items[#items + 1] = {
                         text = country_label
                             .. "  ("
@@ -1103,7 +1088,6 @@ function PrayerTimes:showLocationList()
 
         local final_items = {}
 
-        -- Search entry always first
         final_items[#final_items + 1] = {
             text = "🔍  " .. self:t("search_menu_label"),
             callback = function()
@@ -1116,8 +1100,6 @@ function PrayerTimes:showLocationList()
                     pcall(require, "ui/widget/inputdialog")
 
                 if not ok_id or not InputDialog then
-                    -- InputDialog not available on this build.
-                    -- Just reopen the full list.
                     openMenu("")
                     return
                 end
@@ -1134,7 +1116,6 @@ function PrayerTimes:showLocationList()
                             id = "close",
                             callback = function()
                                 UIManager:close(search_dlg)
-                                -- Reopen the full unfiltered list
                                 openMenu("")
                             end,
                         },
@@ -1190,12 +1171,10 @@ function PrayerTimes:showLocationList()
         UIManager:show(self.location_menu)
     end
 
-    -- Initial open: no filter, full list
     openMenu("")
 end
 
 function PrayerTimes:showAddLocationInput()
-    -- Show the friendly step-by-step guide first
     UIManager:show(InfoMessage:new{
         text = self:t("add_location_guide_text"),
         timeout = 25,
@@ -1325,7 +1304,6 @@ function PrayerTimes:showAddLocationInput()
 
                         local saved = saveLocations()
 
-                        -- Determine which name to show in the message
                         local city_display = city_en
                         if lang == "ar"
                                 and city_ar ~= "" then
@@ -1334,37 +1312,31 @@ function PrayerTimes:showAddLocationInput()
 
                         local suggested =
                             getSuggestedMethod(country_en)
+                        local suggested_madhhab =
+                            getSuggestedAsrMadhhab(country_en)
 
                         local method_name
+                        local madhhab_name
                         local raw_template
                         local final_msg
 
                         if suggested then
-                            self.settings.calculation.method =
-                                suggested
+                            self.settings.calculation.method = suggested
+                            self.settings.calculation.asr_madhhab = suggested_madhhab
 
-                            method_name =
-                                getMethodDisplayName(
-                                    self,
-                                    suggested
-                                )
-
+                            method_name = getMethodDisplayName(self, suggested)
+                            madhhab_name = getAsrMadhhabDisplayName(self, suggested_madhhab)
                             raw_template = self:t("method_recommended_info")
                         else
-                            method_name =
-                                getMethodDisplayName(
-                                    self,
-                                    self.settings
-                                        .calculation.method
-                                )
-
+                            method_name = getMethodDisplayName(self, self.settings.calculation.method)
+                            madhhab_name = getAsrMadhhabDisplayName(self, self.settings.calculation.asr_madhhab)
                             raw_template = self:t("method_no_recommendation")
                         end
 
-                        -- FIX: Chain raw sub substitutions for accurate placeholder rendering
                         final_msg = raw_template
                             :gsub("%%1", city_display)
                             :gsub("%%2", method_name)
+                            :gsub("%%3", madhhab_name)
 
                         UIManager:show(InfoMessage:new{
                             text = final_msg,
@@ -1385,7 +1357,7 @@ function PrayerTimes:showAddLocationInput()
                             lng,
                             tz,
                             country_en,
-                            true -- silent: skip the small "Location set" popup
+                            true
                         )
 
                         UIManager:close(dialog)
@@ -1420,20 +1392,27 @@ function PrayerTimes:setLocation(
     }
 
     local suggested_applied = false
+    local suggested_madhhab_applied = false
 
     if country then
         local suggested = getSuggestedMethod(country)
+        local suggested_madhhab = getSuggestedAsrMadhhab(country)
+
         if suggested
                 and self.settings.calculation.method
                     ~= suggested then
             self.settings.calculation.method = suggested
             suggested_applied = true
         end
+
+        if suggested_madhhab
+                and self.settings.calculation.asr_madhhab
+                    ~= suggested_madhhab then
+            self.settings.calculation.asr_madhhab = suggested_madhhab
+            suggested_madhhab_applied = true
+        end
     end
 
-    -- Auto-enable a sensible high-latitude rule for northern
-    -- regions so users do not encounter unavailable prayer times
-    -- without any explanation.
     local hl_auto_enabled = false
     if type(lat) == "number"
             and math.abs(lat) >= 48
@@ -1459,17 +1438,21 @@ function PrayerTimes:setLocation(
         display_name = name_ar
     end
 
-    if suggested_applied then
+    if suggested_applied or suggested_madhhab_applied then
         local method_name = getMethodDisplayName(
             self,
             self.settings.calculation.method
         )
+        local madhhab_name = getAsrMadhhabDisplayName(
+            self,
+            self.settings.calculation.asr_madhhab
+        )
 
-        -- FIX: Chain raw sub substitutions for accurate placeholder rendering
         local raw_template = self:t("method_recommended_info")
         local final_msg = raw_template
             :gsub("%%1", display_name)
             :gsub("%%2", method_name)
+            :gsub("%%3", madhhab_name)
 
         UIManager:show(InfoMessage:new{
             text = final_msg,

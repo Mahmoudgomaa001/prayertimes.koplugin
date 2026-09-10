@@ -48,7 +48,7 @@ local translations = {
         isna         = "ISNA (North America)",
         moroccan     = "Moroccan (19°/17°)",
         tehran       = "Tehran (Iran)",
-        jafari       = "Jafari ",
+        jafari       = "Jafari",
         shafi        = "Shafi (shadow equals object)",
         hanafi       = "Hanafi (shadow twice object)",
 
@@ -212,17 +212,18 @@ local translations = {
 
         method_recommended_info =
             "Location saved: %1\n\n"
-            .. "Recommended method: %2\n\n"
-            .. "This was chosen automatically based on your country. "
-            .. "You can change it anytime from:\n"
-            .. "Calculation Settings > Calculation Method",
+            .. "Recommended method: %2\n"
+            .. "Recommended Asr school: %3\n\n"
+            .. "These were chosen automatically based on your country. "
+            .. "You can change them anytime from:\n"
+            .. "Calculation Settings",
 
         method_no_recommendation =
             "Location saved: %1\n\n"
-            .. "No specific recommendation for this country. "
-            .. "Current method: %2\n\n"
-            .. "You can change it anytime from:\n"
-            .. "Calculation Settings > Calculation Method",
+            .. "Current method: %2\n"
+            .. "Current Asr school: %3\n\n"
+            .. "You can change them anytime from:\n"
+            .. "Calculation Settings",
 
         about_text =
             "Prayer Times\nVersion 1.2.0\n\n"
@@ -284,7 +285,7 @@ local translations = {
         isna         = "إسنا (أمريكا الشمالية)",
         moroccan     = "المغربية (19°/17°)",
         tehran       = "طهران (إيران)",
-        jafari       = "جعفري ",
+        jafari       = "جعفري",
         shafi        = "الشافعي (ظل المثل)",
         hanafi       = "الحنفي (ظل المثلين)",
 
@@ -337,11 +338,12 @@ local translations = {
         preview = "معاينة", apply = "تطبيق",
 
         country_hint    = "e.g., Egypt",
-        country_ar_hint = "e.g., مصر",
+        country_ar_hint = "مثال: مصر",
         city_hint       = "e.g., Cairo",
-        city_ar_hint    = "e.g., القاهرة",
-        latitude_hint   = "e.g., 30.0444",
-        longitude_hint  = "e.g., 31.2357",
+        city_ar_hint    = "مثال: القاهرة",
+        latitude_hint   = "مثال: 30.0444",
+        longitude_hint  = "مثال: 31.2357",
+
         location_help_title = "تحتاج الإحداثيات؟",
         location_help_text = "راجع 'كيف تحصل على إحداثيات موقعك' للتعليمات الكاملة.",
 
@@ -447,17 +449,18 @@ local translations = {
 
         method_recommended_info =
             "تم حفظ الموقع: %1\n\n"
-            .. "الطريقة المقترحة: %2\n\n"
-            .. "تم اختيارها تلقائياً حسب دولتك. "
-            .. "يمكنك تغييرها في أي وقت من:\n"
-            .. "إعدادات الحساب > طريقة الحساب",
+            .. "الطريقة المقترحة: %2\n"
+            .. "مذهب العصر المقترح: %3\n\n"
+            .. "تم اختيارهما تلقائياً حسب دولتك. "
+            .. "يمكنك تغييرهما في أي وقت من:\n"
+            .. "إعدادات الحساب",
 
         method_no_recommendation =
             "تم حفظ الموقع: %1\n\n"
-            .. "لا توجد طريقة مقترحة لهذه الدولة. "
-            .. "الطريقة الحالية: %2\n\n"
-            .. "يمكنك تغييرها في أي وقت من:\n"
-            .. "إعدادات الحساب > طريقة الحساب",
+            .. "الطريقة الحالية: %2\n"
+            .. "مذهب العصر الحالي: %3\n\n"
+            .. "يمكنك تغييرهما في أي وقت من:\n"
+            .. "إعدادات الحساب",
 
         about_text =
             "مواقيت الصلاة\nالإصدار 1.2.0\n\n"
