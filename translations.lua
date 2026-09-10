@@ -89,13 +89,7 @@ local translations = {
         longitude_hint  = "e.g., 31.2357",
 
         location_help_title = "Need coordinates?",
-        location_help_text =
-            "Search online for your city name + 'latitude longitude'.\n"
-            .. "Example: 'Cairo latitude longitude'.\n\n"
-            .. "You can also use Google Maps:\n"
-            .. "Right-click on your city, the first number is latitude,\n"
-            .. "the second is longitude.\n\n"
-            .. "The timezone is calculated automatically.",
+        location_help_text = "See 'How to Find Your Coordinates' for a step-by-step guide.",
 
         invalid_input   = "Invalid input",
         invalid_lat     = "Latitude must be between -90 and 90",
@@ -176,6 +170,43 @@ local translations = {
             .. "Per-prayer corrections\n"
             .. "Arabic & English\n\n"
             .. "Astronomical basis: M. Shawkat Odeh / IAC",
+        search_city = "Search",
+        show_all_cities = "Show All",
+        search_hint = "Search: Cairo, Mecca, الرياض...",
+        add_location_guide_title = "How to Find Your Coordinates",
+        add_location_guide_text =
+            "You can easily find your latitude and longitude using this website:\n\n"
+            .. "1. Open your browser and go to:\n"
+            .. "   https://timesprayer.com/\n\n"
+            .. "2. Click the 'My Location' button.\n"
+            .. "   The site will ask permission to access your location.\n\n"
+            .. "3. Allow access. The site will detect your\n"
+            .. "   coordinates, timezone, and calculation method.\n\n"
+            .. "4. The page will show:\n"
+            .. "   - Your city name\n"
+            .. "   - Latitude and Longitude\n"
+            .. "   - Recommended calculation method\n"
+            .. "   - Asr madhhab\n\n"
+            .. "5. Use those values here:\n"
+            .. "   - Enter latitude and longitude below\n"
+            .. "   - The plugin will auto-select the method\n"
+            .. "     based on your country (you can change it)\n\n"
+            .. "6. If you prefer not to share your location,\n"
+            .. "   search for your city manually on the site.",
+
+        method_recommended_info =
+            "Location saved: %1\n\n"
+            .. "Recommended method: %2\n\n"
+            .. "This was chosen automatically based on your country. "
+            .. "You can change it anytime from:\n"
+            .. "Calculation Settings > Calculation Method",
+
+        method_no_recommendation =
+            "Location saved: %1\n\n"
+            .. "No specific recommendation for this country. "
+            .. "Current method: %2\n\n"
+            .. "You can change it anytime from:\n"
+            .. "Calculation Settings > Calculation Method",
     },
 
     ar = {
@@ -259,21 +290,15 @@ local translations = {
         cancel = "إلغاء", save = "حفظ",
         preview = "معاينة", apply = "تطبيق",
 
-        country_hint    = "مثال: مصر",
+        country_hint    = "e.g., Egypt",
         country_ar_hint = "مثال: مصر",
-        city_hint       = "مثال: القاهرة",
+        city_hint       = "e.g., Cairo",
         city_ar_hint    = "مثال: القاهرة",
-        latitude_hint   = "مثال: 30.0444",
-        longitude_hint  = "مثال: 31.2357",
+        latitude_hint   = "e.g., 30.0444",
+        longitude_hint  = "e.g., 31.2357",
 
         location_help_title = "تحتاج الإحداثيات؟",
-        location_help_text =
-            "ابحث عن اسم مدينتك + 'خط العرض خط الطول'.\n"
-            .. "مثال: 'القاهرة خط العرض خط الطول'.\n\n"
-            .. "يمكنك استخدام خرائط جوجل:\n"
-            .. "انقر بزر الماوس الأيمن، الرقم الأول خط العرض\n"
-            .. "والثاني خط الطول.\n\n"
-            .. "المنطقة الزمنية تُحسب تلقائيا.",
+        location_help_text = "راجع 'كيف تحصل على إحداثيات موقعك' للتعليمات الكاملة.",
 
         invalid_input   = "إدخال غير صالح",
         invalid_lat     = "خط العرض بين -90 و 90",
@@ -354,6 +379,44 @@ local translations = {
             .. "تصحيحات لكل صلاة\n"
             .. "عربي وإنجليزي\n\n"
             .. "الأساس الفلكي: م. محمد شوكت عودة / IAC",
+        search_city = "بحث",
+        show_all_cities = "عرض الكل",
+        search_hint = "ابحث: القاهرة، مكة، Casablanca...",
+        add_location_guide_title = "كيف تحصل على إحداثيات موقعك",
+        add_location_guide_text =
+            "يمكنك بسهولة الحصول على خطي العرض والطول من هذا الموقع:\n\n"
+            .. "1. افتح المتصفح واذهب إلى:\n"
+            .. "   https://timesprayer.com/\n\n"
+            .. "2. اضغط زر 'جد مكاني' (My Location).\n"
+            .. "   سيطلب الموقع إذن الوصول إلى موقعك.\n\n"
+            .. "3. اسمح بالوصول. سيكتشف الموقع تلقائياً:\n"
+            .. "   الإحداثيات والمنطقة الزمنية والطريقة.\n\n"
+            .. "4. ستعرض الصفحة:\n"
+            .. "   - اسم مدينتك\n"
+            .. "   - خط العرض وخط الطول\n"
+            .. "   - طريقة الحساب المقترحة\n"
+            .. "   - مذهب العصر\n\n"
+            .. "5. استخدم هذه القيم هنا:\n"
+            .. "   - أدخل خط العرض وخط الطول أدناه\n"
+            .. "   - ستختار الإضافة الطريقة تلقائياً\n"
+            .. "     حسب دولتك (يمكنك تغييرها)\n\n"
+            .. "6. إذا كنت لا تريد مشاركة موقعك،\n"
+            .. "   ابحث عن مدينتك يدوياً في الموقع.",
+
+        method_recommended_info =
+            "تم حفظ الموقع: %1\n\n"
+            .. "الطريقة المقترحة: %2\n\n"
+            .. "تم اختيارها تلقائياً حسب دولتك. "
+            .. "يمكنك تغييرها في أي وقت من:\n"
+            .. "إعدادات الحساب > طريقة الحساب",
+
+        method_no_recommendation =
+            "تم حفظ الموقع: %1\n\n"
+            .. "لا توجد طريقة مقترحة لهذه الدولة. "
+            .. "الطريقة الحالية: %2\n\n"
+            .. "يمكنك تغييرها في أي وقت من:\n"
+            .. "إعدادات الحساب > طريقة الحساب",
+        
     },
 }
 

@@ -34,6 +34,29 @@ local function getCustomLocationsPath()
     return DataStorage:getSettingsDir() .. "/prayertimes_custom_locations.lua"
 end
 
+-- Translates a stored English method key like "Egyptian" or "UmmAlQura"
+-- into the user's current interface language for display purposes.
+local method_translation_keys = {
+    ["IACStandard"] = "iac_standard",
+    ["MWL"]         = "mwl",
+    ["Egyptian"]    = "egyptian",
+    ["UmmAlQura"]   = "ummalqura",
+    ["Karachi"]     = "karachi",
+    ["ISNA"]        = "isna",
+    ["Moroccan"]    = "moroccan",
+    ["Tehran"]      = "tehran",
+    ["Jafari"]      = "jafari",
+}
+
+local function getMethodDisplayName(self, method_key)
+    local tkey = method_translation_keys[method_key]
+    if tkey then
+        return self:t(tkey)
+    end
+    return method_key or ""
+end
+
+
 local function loadLocations()
     local dist_file = getPluginDir() .. "/locations.lua"
     local ok_attr, attr = pcall(lfs.attributes, dist_file)
@@ -840,62 +863,208 @@ end
 
 function PrayerTimes:showLocationList()
     local lang = self.settings.display.language or "en"
-    local items = {}
 
-    local keys = {}
-    for country in pairs(locations) do keys[#keys+1] = country end
-    table.sort(keys)
+    -- Build a flat searchable list of all cities
+    local flat_list = {}
 
-    for _, country in ipairs(keys) do
+    local country_keys = {}
+    for country in pairs(locations) do
+        country_keys[#country_keys+1] = country
+    end
+    table.sort(country_keys)
+
+    for _, country in ipairs(country_keys) do
         local cities = locations[country]
-        local label = country
+        local country_label = country
         if lang == "ar" and country_names_ar[country] then
-            label = country_names_ar[country]
+            country_label = country_names_ar[country]
         end
 
-        local city_items = {}
         for _, c in ipairs(cities) do
-            local cname = c.name
+            local city_label = c.name
             if lang == "ar" and c.name_ar and c.name_ar ~= "" then
-                cname = c.name_ar
+                city_label = c.name_ar
             end
-            city_items[#city_items+1] = {
-                text = cname,
-                callback = function()
-                    self:setLocation(c.name, c.name_ar, c.lat, c.lng, c.tz, country)
-                    if self.location_menu then
-                        UIManager:close(self.location_menu)
-                        self.location_menu = nil
-                    end
-                end,
+
+            -- Display: "City — Country"
+            local display_text = city_label .. " — " .. country_label
+
+            -- Searchable text includes all names for both languages
+            local search_text = string.lower(
+                (c.name or "")
+                .. " "
+                .. (c.name_ar or "")
+                .. " "
+                .. country
+                .. " "
+                .. (country_names_ar[country] or "")
+            )
+
+            flat_list[#flat_list+1] = {
+                text = display_text,
+                search_text = search_text,
+                city = c,
+                country = country,
+            }
+        end
+    end
+
+    -- Sort alphabetically by display text
+    table.sort(flat_list, function(a, b)
+        return a.text < b.text
+    end)
+
+    local function showFilteredList(filter_text)
+        filter_text = string.lower(
+            trimStr(filter_text or "")
+        )
+
+        local items = {}
+
+        for _, entry in ipairs(flat_list) do
+            local show = true
+
+            if filter_text ~= "" then
+                show = entry.search_text:find(
+                    filter_text,
+                    1,
+                    true -- plain text search
+                ) ~= nil
+            end
+
+            if show then
+                items[#items+1] = {
+                    text = entry.text,
+                    callback = function()
+                        local c = entry.city
+                        self:setLocation(
+                            c.name,
+                            c.name_ar,
+                            c.lat,
+                            c.lng,
+                            c.tz,
+                            entry.country
+                        )
+
+                        if self.location_menu then
+                            UIManager:close(
+                                self.location_menu
+                            )
+                            self.location_menu = nil
+                        end
+
+                        if self.search_dialog then
+                            UIManager:close(
+                                self.search_dialog
+                            )
+                            self.search_dialog = nil
+                        end
+                    end,
+                }
+            end
+        end
+
+        if #items == 0 then
+            items[#items+1] = {
+                text = self:t("na"),
             }
         end
 
-        items[#items+1] = { text = label, sub_item_table = city_items }
+        if self.location_menu then
+            UIManager:close(self.location_menu)
+        end
+
+        self.location_menu = Menu:new{
+            title = self:t("choose_from_list")
+                .. " (" .. #items .. ")",
+            item_table = items,
+            width = Screen:getWidth()
+                - Screen:scaleBySize(20),
+            height = Screen:getHeight()
+                - Screen:scaleBySize(80),
+        }
+
+        UIManager:show(self.location_menu)
     end
 
-    self.location_menu = Menu:new{
+    -- Show search input first
+    local InputDialog = require("ui/widget/inputdialog")
+
+    self.search_dialog = InputDialog:new{
         title = self:t("choose_from_list"),
-        item_table = items,
+        input = "",
+        input_hint = lang == "ar"
+            and "ابحث: القاهرة، مكة، Casablanca..."
+            or "Search: Cairo, Mecca, الرياض...",
+        buttons = {{
+            {
+                text = self:t("cancel"),
+                id = "close",
+                callback = function()
+                    UIManager:close(self.search_dialog)
+                    self.search_dialog = nil
+                end,
+            },
+            {
+                text = lang == "ar"
+                    and "عرض الكل"
+                    or "Show All",
+                callback = function()
+                    UIManager:close(self.search_dialog)
+                    self.search_dialog = nil
+                    showFilteredList("")
+                end,
+            },
+            {
+                text = lang == "ar"
+                    and "بحث"
+                    or "Search",
+                is_enter_default = true,
+                callback = function()
+                    local query =
+                        self.search_dialog:getInputText()
+
+                    UIManager:close(self.search_dialog)
+                    self.search_dialog = nil
+                    showFilteredList(query)
+                end,
+            },
+        }},
     }
-    UIManager:show(self.location_menu)
+
+    UIManager:show(self.search_dialog)
 end
 
 function PrayerTimes:showAddLocationInput()
+    -- Show the friendly step-by-step guide first
     UIManager:show(InfoMessage:new{
-        text = self:t("location_help_text"),
-        timeout = 8,
+        text = self:t("add_location_guide_text"),
+        timeout = 25,
     })
 
-    UIManager:scheduleIn(0.3, function()
-        local fields = {
-            { hint = self:t("country_hint"),    text = "" },
-            { hint = self:t("country_ar_hint"), text = "" },
-            { hint = self:t("city_hint"),       text = "" },
-            { hint = self:t("city_ar_hint"),    text = "" },
-            { hint = self:t("latitude_hint"),   text = "" },
-            { hint = self:t("longitude_hint"),  text = "" },
-        }
+    UIManager:scheduleIn(0.5, function()
+        local lang = self.settings.display.language or "en"
+
+        local fields
+        if lang == "ar" then
+            fields = {
+                { hint = "Egypt",   text = "" },
+                { hint = "مصر",     text = "" },
+                { hint = "Cairo",   text = "" },
+                { hint = "القاهرة", text = "" },
+                { hint = "30.0444", text = "" },
+                { hint = "31.2357", text = "" },
+            }
+        else
+            fields = {
+                { hint = "e.g., Egypt",    text = "" },
+                { hint = "e.g., مصر",      text = "" },
+                { hint = "e.g., Cairo",    text = "" },
+                { hint = "e.g., القاهرة",  text = "" },
+                { hint = "e.g., 30.0444",  text = "" },
+                { hint = "e.g., 31.2357",  text = "" },
+            }
+        end
 
         local dialog
         dialog = MultiInputDialog:new{
@@ -904,100 +1073,250 @@ function PrayerTimes:showAddLocationInput()
             buttons = {{
                 {
                     text = self:t("cancel"),
-                    callback = function() UIManager:close(dialog) end,
+                    id = "close",
+                    callback = function()
+                        UIManager:close(dialog)
+                    end,
                 },
                 {
-                    text = self:t("location_help_title"),
+                    text = self:t("add_location_guide_title"),
                     callback = function()
                         UIManager:show(InfoMessage:new{
-                            text = self:t("location_help_text"), timeout = 20 })
+                            text = self:t(
+                                "add_location_guide_text"
+                            ),
+                            timeout = 25,
+                        })
                     end,
                 },
                 {
                     text = self:t("save"),
+                    is_enter_default = true,
                     callback = function()
                         local function num(s)
-                            if type(s) ~= "string" or s == "" then return nil end
-                            s = s:gsub("%s+", ""):gsub(",", ".")
+                            if type(s) ~= "string"
+                                    or s == "" then
+                                return nil
+                            end
+                            s = s:gsub("%s+", "")
+                                 :gsub(",", ".")
                             return tonumber(s)
                         end
 
-                        local country_en = trimStr(fields[1].text)
-                        local country_ar = trimStr(fields[2].text)
-                        local city_en    = trimStr(fields[3].text)
-                        local city_ar    = trimStr(fields[4].text)
-                        local lat        = num(fields[5].text)
-                        local lng        = num(fields[6].text)
+                        local values = dialog:getFields()
 
-                        if not lat or lat < -90 or lat > 90 then
-                            UIManager:show(InfoMessage:new{ text = self:t("invalid_lat") })
+                        local country_en = trimStr(values[1] or "")
+                        local country_ar = trimStr(values[2] or "")
+                        local city_en    = trimStr(values[3] or "")
+                        local city_ar    = trimStr(values[4] or "")
+                        local lat        = num(values[5])
+                        local lng        = num(values[6])
+
+                        if not lat
+                                or lat < -90
+                                or lat > 90 then
+                            UIManager:show(InfoMessage:new{
+                                text = self:t("invalid_lat"),
+                            })
                             return
                         end
-                        if not lng or lng < -180 or lng > 180 then
-                            UIManager:show(InfoMessage:new{ text = self:t("invalid_lng") })
+
+                        if not lng
+                                or lng < -180
+                                or lng > 180 then
+                            UIManager:show(InfoMessage:new{
+                                text = self:t("invalid_lng"),
+                            })
                             return
                         end
 
-                        if country_en == "" then country_en = "Custom" end
-                        if country_ar == "" then country_ar = country_en end
-                        if city_en    == "" then city_en    = "Custom City" end
-                        if city_ar    == "" then city_ar    = city_en end
+                        if country_en == "" then
+                            country_en = "Custom"
+                        end
+                        if country_ar == "" then
+                            country_ar = country_en
+                        end
+                        if city_en == "" then
+                            city_en = "Custom City"
+                        end
+                        if city_ar == "" then
+                            city_ar = city_en
+                        end
 
-                        local tz = math.floor(lng / 15 + 0.5)
+                        local tz = math.floor(
+                            lng / 15 + 0.5
+                        )
 
-                        locations[country_en] = locations[country_en] or {}
-                        country_names_ar[country_en] = country_ar
-                        table.insert(locations[country_en], {
-                            name = city_en, name_ar = city_ar,
-                            lat = lat, lng = lng, tz = tz,
-                        })
+                        locations[country_en] =
+                            locations[country_en] or {}
+
+                        country_names_ar[country_en] =
+                            country_ar
+
+                        table.insert(
+                            locations[country_en],
+                            {
+                                name = city_en,
+                                name_ar = city_ar,
+                                lat = lat,
+                                lng = lng,
+                                tz = tz,
+                            }
+                        )
 
                         local saved = saveLocations()
-                        local msg = interp(self:t("location_added"), city_en)
 
-                        local suggested = getSuggestedMethod(country_en)
+                        -- Determine which name to show in the message
+                        local city_display = city_en
+                        if lang == "ar"
+                                and city_ar ~= "" then
+                            city_display = city_ar
+                        end
+
+                        local suggested =
+                            getSuggestedMethod(country_en)
+
+                        local method_name
+
                         if suggested then
-                            self.settings.calculation.method = suggested
-                            msg = msg .. "\n" .. interp(self:t("method_auto_set"), suggested)
+                            self.settings.calculation.method =
+                                suggested
+
+                            method_name =
+                                getMethodDisplayName(
+                                    self,
+                                    suggested
+                                )
+
+                            UIManager:show(InfoMessage:new{
+                                text = interp(
+                                    self:t(
+                                        "method_recommended_info"
+                                    ):gsub(
+                                        "%%1",
+                                        city_display
+                                    ),
+                                    method_name
+                                ),
+                                timeout = 10,
+                            })
+                        else
+                            method_name =
+                                getMethodDisplayName(
+                                    self,
+                                    self.settings
+                                        .calculation.method
+                                )
+
+                            UIManager:show(InfoMessage:new{
+                                text = interp(
+                                    self:t(
+                                        "method_no_recommendation"
+                                    ):gsub(
+                                        "%%1",
+                                        city_display
+                                    ),
+                                    method_name
+                                ),
+                                timeout = 10,
+                            })
                         end
 
                         if not saved then
-                            msg = msg .. "\n" .. self:t("invalid_input")
+                            UIManager:show(InfoMessage:new{
+                                text = self:t("invalid_input"),
+                                timeout = 4,
+                            })
                         end
 
-                        UIManager:show(InfoMessage:new{ text = msg, timeout = 6 })
-                        self:setLocation(city_en, city_ar, lat, lng, tz, country_en, true)
+                        self:setLocation(
+                            city_en,
+                            city_ar,
+                            lat,
+                            lng,
+                            tz,
+                            country_en,
+                            true -- silent: skip the small "Location set" popup
+                        )
+
                         UIManager:close(dialog)
                     end,
                 },
             }},
         }
+
         UIManager:show(dialog)
     end)
 end
 
-function PrayerTimes:setLocation(name, name_ar, lat, lng, tz, country, silent)
+function PrayerTimes:setLocation(
+    name,
+    name_ar,
+    lat,
+    lng,
+    tz,
+    country,
+    silent
+)
     self.settings.location = {
         name       = name,
         name_ar    = name_ar or name,
         latitude   = lat,
         longitude  = lng,
         timezone   = tz,
-        dst_offset = (self.settings.location and self.settings.location.dst_offset) or 0,
+        dst_offset =
+            (self.settings.location
+                and self.settings.location.dst_offset)
+            or 0,
     }
+
+    local suggested_applied = false
 
     if country then
         local suggested = getSuggestedMethod(country)
-        if suggested then
+        if suggested
+                and self.settings.calculation.method
+                    ~= suggested then
             self.settings.calculation.method = suggested
+            suggested_applied = true
         end
     end
 
     self:flushSettings()
 
-    if not silent then
+    if silent then
+        return
+    end
+
+    -- Choose the correct name to display based on current language
+    local lang = self.settings.display.language or "en"
+    local display_name = name
+    if lang == "ar"
+            and name_ar
+            and name_ar ~= "" then
+        display_name = name_ar
+    end
+
+    if suggested_applied then
+        local method_name = getMethodDisplayName(
+            self,
+            self.settings.calculation.method
+        )
+
         UIManager:show(InfoMessage:new{
-            text = interp(self:t("location_set"), name),
+            text = interp(
+                self:t("method_recommended_info")
+                    :gsub("%%1", display_name),
+                method_name
+            ),
+            timeout = 8,
+        })
+    else
+        UIManager:show(InfoMessage:new{
+            text = interp(
+                self:t("location_set"),
+                display_name
+            ),
             timeout = 3,
         })
     end
