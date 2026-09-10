@@ -1336,6 +1336,8 @@ function PrayerTimes:showAddLocationInput()
                             getSuggestedMethod(country_en)
 
                         local method_name
+                        local raw_template
+                        local final_msg
 
                         if suggested then
                             self.settings.calculation.method =
@@ -1347,18 +1349,7 @@ function PrayerTimes:showAddLocationInput()
                                     suggested
                                 )
 
-                            UIManager:show(InfoMessage:new{
-                                text = interp(
-                                    self:t(
-                                        "method_recommended_info"
-                                    ):gsub(
-                                        "%%1",
-                                        city_display
-                                    ),
-                                    method_name
-                                ),
-                                timeout = 10,
-                            })
+                            raw_template = self:t("method_recommended_info")
                         else
                             method_name =
                                 getMethodDisplayName(
@@ -1367,19 +1358,18 @@ function PrayerTimes:showAddLocationInput()
                                         .calculation.method
                                 )
 
-                            UIManager:show(InfoMessage:new{
-                                text = interp(
-                                    self:t(
-                                        "method_no_recommendation"
-                                    ):gsub(
-                                        "%%1",
-                                        city_display
-                                    ),
-                                    method_name
-                                ),
-                                timeout = 10,
-                            })
+                            raw_template = self:t("method_no_recommendation")
                         end
+
+                        -- FIX: Chain raw sub substitutions for accurate placeholder rendering
+                        final_msg = raw_template
+                            :gsub("%%1", city_display)
+                            :gsub("%%2", method_name)
+
+                        UIManager:show(InfoMessage:new{
+                            text = final_msg,
+                            timeout = 10,
+                        })
 
                         if not saved then
                             UIManager:show(InfoMessage:new{
@@ -1475,12 +1465,14 @@ function PrayerTimes:setLocation(
             self.settings.calculation.method
         )
 
+        -- FIX: Chain raw sub substitutions for accurate placeholder rendering
+        local raw_template = self:t("method_recommended_info")
+        local final_msg = raw_template
+            :gsub("%%1", display_name)
+            :gsub("%%2", method_name)
+
         UIManager:show(InfoMessage:new{
-            text = interp(
-                self:t("method_recommended_info")
-                    :gsub("%%1", display_name),
-                method_name
-            ),
+            text = final_msg,
             timeout = 8,
         })
     else
