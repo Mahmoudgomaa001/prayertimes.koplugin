@@ -48,17 +48,36 @@ local translations = {
         isna         = "ISNA (North America)",
         moroccan     = "Moroccan (19°/17°)",
         tehran       = "Tehran (Iran)",
-        jafari       = "Jafari (Shia)",
+        jafari       = "Jafari ",
         shafi        = "Shafi (shadow equals object)",
         hanafi       = "Hanafi (shadow twice object)",
 
-        high_latitude_title = "High-Latitude Rule",
+        high_latitude_title = "Northern Regions (High Latitude)",
         high_latitude_none = "Show real times only (--:-- if unavailable)",
         high_latitude_seventh = "One-seventh of the night",
         high_latitude_middle = "Middle of the night",
         high_latitude_angle = "Angle-based portion of night",
         high_latitude_fixed = "Fixed minutes from sunrise/sunset",
         high_latitude_minutes = "Fixed minutes value",
+        high_latitude_what_is_this = "What is this?",
+        high_latitude_explanation =
+            "In some far northern countries (e.g., Norway, Sweden, Iceland)\n"
+            .. "twilight may not end in summer, or the sun may not rise in winter.\n\n"
+            .. "In those cases, Fajr or Isha cannot be calculated astronomically.\n\n"
+            .. "This setting decides how to estimate the times:\n\n"
+            .. "- Real times only: no estimation (shows --:--)\n"
+            .. "- One-seventh of night: Fajr = Sunrise - 1/7 of night\n"
+            .. "- Middle of night: Fajr = Sunrise - 1/2 of night\n"
+            .. "- Angle-based: portion of night based on prayer angle\n"
+            .. "- Fixed minutes: fixed minutes before sunrise / after sunset\n\n"
+            .. "If you live in a normal Arab or Islamic country,\n"
+            .. "you do NOT need to change this.",
+        high_latitude_auto_enabled =
+            "Your location is at a high latitude (%1°).\n"
+            .. "'One-seventh of night' has been enabled automatically "
+            .. "to estimate Fajr and Isha when astronomical signs are absent.\n\n"
+            .. "You can change this in:\n"
+            .. "Calculation Settings > Northern Regions (High Latitude)",
 
         prayer_adjustments = "Per-Prayer Corrections (minutes)",
         fajr_adjustment = "Fajr correction",
@@ -82,9 +101,9 @@ local translations = {
         preview = "Preview", apply = "Apply",
 
         country_hint    = "e.g., Egypt",
-        country_ar_hint = "مثال: مصر",
+        country_ar_hint = "e.g., مصر",
         city_hint       = "e.g., Cairo",
-        city_ar_hint    = "مثال: القاهرة",
+        city_ar_hint    = "e.g., القاهرة",
         latitude_hint   = "e.g., 30.0444",
         longitude_hint  = "e.g., 31.2357",
 
@@ -160,19 +179,16 @@ local translations = {
         calc_error = "Calculation error: %1",
         unavailable = "--:--",
 
-        about_text =
-            "Prayer Times\nVersion 1.2.0\n\n"
-            .. "Offline astronomical calculation\n"
-            .. "9 methods incl. IAC Standard & Moroccan\n"
-            .. "Hijri calendar with adjustment\n"
-            .. "Fasting reminders\n"
-            .. "High-latitude support\n"
-            .. "Per-prayer corrections\n"
-            .. "Arabic & English\n\n"
-            .. "Astronomical basis: M. Shawkat Odeh / IAC",
+        search_menu_label = "Search for a city...",
+        search_title = "Search for a city",
+        search_hint = "Type city or country name...",
+        search_button = "Search",
+        search_new = "New search...",
+        search_results_title = "Results",
+        search_no_results = "No results found",
         search_city = "Search",
         show_all_cities = "Show All",
-        search_hint = "Search: Cairo, Mecca, الرياض...",
+
         add_location_guide_title = "How to Find Your Coordinates",
         add_location_guide_text =
             "You can easily find your latitude and longitude using this website:\n\n"
@@ -207,6 +223,17 @@ local translations = {
             .. "Current method: %2\n\n"
             .. "You can change it anytime from:\n"
             .. "Calculation Settings > Calculation Method",
+
+        about_text =
+            "Prayer Times\nVersion 1.2.0\n\n"
+            .. "Offline astronomical calculation\n"
+            .. "9 methods incl. IAC Standard & Moroccan\n"
+            .. "Hijri calendar with adjustment\n"
+            .. "Fasting reminders\n"
+            .. "High-latitude support\n"
+            .. "Per-prayer corrections\n"
+            .. "Arabic & English\n\n"
+            .. "Astronomical basis: M. Shawkat Odeh / IAC",
     },
 
     ar = {
@@ -257,17 +284,36 @@ local translations = {
         isna         = "إسنا (أمريكا الشمالية)",
         moroccan     = "المغربية (19°/17°)",
         tehran       = "طهران (إيران)",
-        jafari       = "جعفري (شيعي)",
+        jafari       = "جعفري ",
         shafi        = "الشافعي (ظل المثل)",
         hanafi       = "الحنفي (ظل المثلين)",
 
-        high_latitude_title = "قاعدة خطوط العرض العليا",
+        high_latitude_title = "المناطق الشمالية (خطوط العرض العليا)",
         high_latitude_none = "الأوقات الحقيقية فقط (--:-- إن لم تتوفر)",
         high_latitude_seventh = "سُبع الليل",
         high_latitude_middle = "منتصف الليل",
         high_latitude_angle = "جزء من الليل حسب الزاوية",
         high_latitude_fixed = "دقائق ثابتة من الشروق/الغروب",
         high_latitude_minutes = "عدد الدقائق الثابتة",
+        high_latitude_what_is_this = "ما هذا الخيار؟",
+        high_latitude_explanation =
+            "في بعض الدول الشمالية (مثل النرويج، السويد، آيسلندا)\n"
+            .. "قد لا يغيب الشفق في الصيف، أو لا تشرق الشمس في الشتاء.\n\n"
+            .. "في هذه الحالة لا يمكن حساب الفجر أو العشاء فلكياً.\n\n"
+            .. "هذا الخيار يحدد كيف يتم تقدير الأوقات:\n\n"
+            .. "- الأوقات الحقيقية فقط: لا يتم التقدير (يظهر --:--)\n"
+            .. "- سُبع الليل: الفجر = الشروق - سُبع الليل\n"
+            .. "- منتصف الليل: الفجر = الشروق - نصف الليل\n"
+            .. "- حسب الزاوية: جزء من الليل بناء على زاوية الصلاة\n"
+            .. "- دقائق ثابتة: فترة ثابتة قبل الشروق أو بعد الغروب\n\n"
+            .. "إذا كنت في منطقة عربية أو إسلامية عادية،\n"
+            .. "لا تحتاج لتغيير هذا الخيار.",
+        high_latitude_auto_enabled =
+            "موقعك في منطقة شمالية (خط عرض %1°).\n"
+            .. "تم تفعيل 'سُبع الليل' تلقائياً "
+            .. "لتقدير الفجر والعشاء عند غياب العلامة الفلكية.\n\n"
+            .. "يمكنك تغيير ذلك من:\n"
+            .. "إعدادات الحساب > المناطق الشمالية (خطوط العرض العليا)",
 
         prayer_adjustments = "تصحيحات كل صلاة (بالدقائق)",
         fajr_adjustment = "تصحيح الفجر",
@@ -291,12 +337,11 @@ local translations = {
         preview = "معاينة", apply = "تطبيق",
 
         country_hint    = "e.g., Egypt",
-        country_ar_hint = "مثال: مصر",
+        country_ar_hint = "e.g., مصر",
         city_hint       = "e.g., Cairo",
-        city_ar_hint    = "مثال: القاهرة",
+        city_ar_hint    = "e.g., القاهرة",
         latitude_hint   = "e.g., 30.0444",
         longitude_hint  = "e.g., 31.2357",
-
         location_help_title = "تحتاج الإحداثيات؟",
         location_help_text = "راجع 'كيف تحصل على إحداثيات موقعك' للتعليمات الكاملة.",
 
@@ -369,19 +414,16 @@ local translations = {
         calc_error = "خطأ في الحساب: %1",
         unavailable = "--:--",
 
-        about_text =
-            "مواقيت الصلاة\nالإصدار 1.2.0\n\n"
-            .. "حساب فلكي محلي بدون إنترنت\n"
-            .. "9 طرق incl. المركز الفلكي والمغربية\n"
-            .. "تقويم هجري مع تعديل\n"
-            .. "تذكيرات الصيام\n"
-            .. "دعم خطوط العرض العليا\n"
-            .. "تصحيحات لكل صلاة\n"
-            .. "عربي وإنجليزي\n\n"
-            .. "الأساس الفلكي: م. محمد شوكت عودة / IAC",
+        search_menu_label = "بحث عن مدينة...",
+        search_title = "بحث عن مدينة",
+        search_hint = "اكتب اسم المدينة أو الدولة...",
+        search_button = "بحث",
+        search_new = "بحث جديد...",
+        search_results_title = "نتائج البحث",
+        search_no_results = "لا توجد نتائج",
         search_city = "بحث",
         show_all_cities = "عرض الكل",
-        search_hint = "ابحث: القاهرة، مكة، Casablanca...",
+
         add_location_guide_title = "كيف تحصل على إحداثيات موقعك",
         add_location_guide_text =
             "يمكنك بسهولة الحصول على خطي العرض والطول من هذا الموقع:\n\n"
@@ -416,7 +458,17 @@ local translations = {
             .. "الطريقة الحالية: %2\n\n"
             .. "يمكنك تغييرها في أي وقت من:\n"
             .. "إعدادات الحساب > طريقة الحساب",
-        
+
+        about_text =
+            "مواقيت الصلاة\nالإصدار 1.2.0\n\n"
+            .. "حساب فلكي محلي بدون إنترنت\n"
+            .. "9 طرق منها المركز الفلكي والمغربية\n"
+            .. "تقويم هجري مع تعديل\n"
+            .. "تذكيرات الصيام\n"
+            .. "دعم خطوط العرض العليا\n"
+            .. "تصحيحات لكل صلاة\n"
+            .. "عربي وإنجليزي\n\n"
+            .. "الأساس الفلكي: م. محمد شوكت عودة / IAC",
     },
 }
 

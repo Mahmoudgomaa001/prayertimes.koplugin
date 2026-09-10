@@ -526,6 +526,8 @@ function PrayerTimes:getLocationSubmenu()
 end
 
 function PrayerTimes:getCalculationSubmenu()
+    local lang = self.settings.display.language or "en"
+
     local method_list = {
         { key = "IACStandard", tkey = "iac_standard" },
         { key = "MWL",         tkey = "mwl" },
@@ -537,32 +539,118 @@ function PrayerTimes:getCalculationSubmenu()
         { key = "Tehran",      tkey = "tehran" },
         { key = "Jafari",      tkey = "jafari" },
     }
+
     local method_items = {}
     for _, m in ipairs(method_list) do
-        method_items[#method_items+1] = {
+        method_items[#method_items + 1] = {
             text = self:t(m.tkey),
-            checked_func = function() return self.settings.calculation.method == m.key end,
-            callback = function() self.settings.calculation.method = m.key; self:flushSettings() end,
+            checked_func = function()
+                return self.settings.calculation.method
+                    == m.key
+            end,
+            callback = function()
+                self.settings.calculation.method = m.key
+                self:flushSettings()
+            end,
         }
     end
 
+    -- High-latitude submenu with a clear explanation entry.
+    -- Normal users can safely ignore this menu.
     local hl_items = {
-        { text = self:t("high_latitude_none"), checked_func = function() return self.settings.calculation.high_latitude_rule == "none" end, callback = function() self.settings.calculation.high_latitude_rule = "none"; self:flushSettings() end },
-        { text = self:t("high_latitude_seventh"), checked_func = function() return self.settings.calculation.high_latitude_rule == "seventh" end, callback = function() self.settings.calculation.high_latitude_rule = "seventh"; self:flushSettings() end },
-        { text = self:t("high_latitude_middle"), checked_func = function() return self.settings.calculation.high_latitude_rule == "middle" end, callback = function() self.settings.calculation.high_latitude_rule = "middle"; self:flushSettings() end },
-        { text = self:t("high_latitude_angle"), checked_func = function() return self.settings.calculation.high_latitude_rule == "angle_based" end, callback = function() self.settings.calculation.high_latitude_rule = "angle_based"; self:flushSettings() end },
-        { text = self:t("high_latitude_fixed"), checked_func = function() return self.settings.calculation.high_latitude_rule == "fixed_minutes" end, callback = function() self.settings.calculation.high_latitude_rule = "fixed_minutes"; self:flushSettings() end },
+        {
+            text = "ℹ️  " .. self:t("high_latitude_what_is_this"),
+            callback = function()
+                UIManager:show(InfoMessage:new{
+                    text = self:t("high_latitude_explanation"),
+                    timeout = 30,
+                })
+            end,
+        },
+        {
+            text = self:t("high_latitude_none"),
+            checked_func = function()
+                return self.settings.calculation
+                    .high_latitude_rule == "none"
+            end,
+            callback = function()
+                self.settings.calculation
+                    .high_latitude_rule = "none"
+                self:flushSettings()
+            end,
+        },
+        {
+            text = self:t("high_latitude_seventh"),
+            checked_func = function()
+                return self.settings.calculation
+                    .high_latitude_rule == "seventh"
+            end,
+            callback = function()
+                self.settings.calculation
+                    .high_latitude_rule = "seventh"
+                self:flushSettings()
+            end,
+        },
+        {
+            text = self:t("high_latitude_middle"),
+            checked_func = function()
+                return self.settings.calculation
+                    .high_latitude_rule == "middle"
+            end,
+            callback = function()
+                self.settings.calculation
+                    .high_latitude_rule = "middle"
+                self:flushSettings()
+            end,
+        },
+        {
+            text = self:t("high_latitude_angle"),
+            checked_func = function()
+                return self.settings.calculation
+                    .high_latitude_rule == "angle_based"
+            end,
+            callback = function()
+                self.settings.calculation
+                    .high_latitude_rule = "angle_based"
+                self:flushSettings()
+            end,
+        },
+        {
+            text = self:t("high_latitude_fixed"),
+            checked_func = function()
+                return self.settings.calculation
+                    .high_latitude_rule == "fixed_minutes"
+            end,
+            callback = function()
+                self.settings.calculation
+                    .high_latitude_rule = "fixed_minutes"
+                self:flushSettings()
+            end,
+        },
     }
 
+    -- Per-prayer manual corrections
     local adj = self.settings.calculation.adjustments or {}
     local adj_items = {}
-    local prayer_keys = { "fajr", "sunrise", "dhuhr", "asr", "maghrib", "isha" }
+    local prayer_keys = {
+        "fajr",
+        "sunrise",
+        "dhuhr",
+        "asr",
+        "maghrib",
+        "isha",
+    }
+
     for _, pk in ipairs(prayer_keys) do
         local tkey = pk .. "_adjustment"
-        adj_items[#adj_items+1] = {
-            text = self:t(tkey) .. ": " .. tostring(adj[pk] or 0),
+        adj_items[#adj_items + 1] = {
+            text = self:t(tkey)
+                .. ": "
+                .. tostring(adj[pk] or 0),
             callback = function()
-                local SpinWidget = require("ui/widget/spinwidget")
+                local SpinWidget =
+                    require("ui/widget/spinwidget")
+
                 UIManager:show(SpinWidget:new{
                     value = adj[pk] or 0,
                     value_min = -30,
@@ -572,7 +660,8 @@ function PrayerTimes:getCalculationSubmenu()
                     title_text = self:t(tkey),
                     callback = function(spin)
                         adj[pk] = spin.value
-                        self.settings.calculation.adjustments = adj
+                        self.settings.calculation
+                            .adjustments = adj
                         self:flushSettings()
                     end,
                 })
@@ -581,16 +670,49 @@ function PrayerTimes:getCalculationSubmenu()
     end
 
     return {
-        { text = self:t("calculation_method"), sub_item_table = method_items },
-        { text = self:t("asr_madhhab"), sub_item_table = {
-            { text = self:t("shafi"), checked_func = function() return self.settings.calculation.asr_madhhab == "Shafi" end, callback = function() self.settings.calculation.asr_madhhab = "Shafi"; self:flushSettings() end },
-            { text = self:t("hanafi"), checked_func = function() return self.settings.calculation.asr_madhhab == "Hanafi" end, callback = function() self.settings.calculation.asr_madhhab = "Hanafi"; self:flushSettings() end },
-        }},
-        { text = self:t("high_latitude_title"), sub_item_table = hl_items },
-        { text = self:t("prayer_adjustments"), sub_item_table = adj_items },
+        {
+            text = self:t("calculation_method"),
+            sub_item_table = method_items,
+        },
+        {
+            text = self:t("asr_madhhab"),
+            sub_item_table = {
+                {
+                    text = self:t("shafi"),
+                    checked_func = function()
+                        return self.settings.calculation
+                            .asr_madhhab == "Shafi"
+                    end,
+                    callback = function()
+                        self.settings.calculation
+                            .asr_madhhab = "Shafi"
+                        self:flushSettings()
+                    end,
+                },
+                {
+                    text = self:t("hanafi"),
+                    checked_func = function()
+                        return self.settings.calculation
+                            .asr_madhhab == "Hanafi"
+                    end,
+                    callback = function()
+                        self.settings.calculation
+                            .asr_madhhab = "Hanafi"
+                        self:flushSettings()
+                    end,
+                },
+            },
+        },
+        {
+            text = self:t("prayer_adjustments"),
+            sub_item_table = adj_items,
+        },
+        {
+            text = self:t("high_latitude_title"),
+            sub_item_table = hl_items,
+        },
     }
 end
-
 function PrayerTimes:getHijriAndFastingSubmenu()
     local function adjItem(value, label)
         return { text = label, checked_func = function() return self.settings.display.hijri_adjustment == value end, callback = function() self.settings.display.hijri_adjustment = value; self:flushSettings() end }
@@ -864,175 +986,212 @@ end
 function PrayerTimes:showLocationList()
     local lang = self.settings.display.language or "en"
 
-    -- Build a flat searchable list of all cities
-    local flat_list = {}
-
-    local country_keys = {}
-    for country in pairs(locations) do
-        country_keys[#country_keys+1] = country
-    end
-    table.sort(country_keys)
-
-    for _, country in ipairs(country_keys) do
-        local cities = locations[country]
-        local country_label = country
-        if lang == "ar" and country_names_ar[country] then
-            country_label = country_names_ar[country]
-        end
-
-        for _, c in ipairs(cities) do
-            local city_label = c.name
-            if lang == "ar" and c.name_ar and c.name_ar ~= "" then
-                city_label = c.name_ar
-            end
-
-            -- Display: "City — Country"
-            local display_text = city_label .. " — " .. country_label
-
-            -- Searchable text includes all names for both languages
-            local search_text = string.lower(
-                (c.name or "")
-                .. " "
-                .. (c.name_ar or "")
-                .. " "
-                .. country
-                .. " "
-                .. (country_names_ar[country] or "")
-            )
-
-            flat_list[#flat_list+1] = {
-                text = display_text,
-                search_text = search_text,
-                city = c,
-                country = country,
-            }
-        end
-    end
-
-    -- Sort alphabetically by display text
-    table.sort(flat_list, function(a, b)
-        return a.text < b.text
-    end)
-
-    local function showFilteredList(filter_text)
-        filter_text = string.lower(
-            trimStr(filter_text or "")
-        )
+    local function buildMenuItems(filter)
+        filter = trimStr(filter or "")
+        local filter_lower = string.lower(filter)
 
         local items = {}
 
-        for _, entry in ipairs(flat_list) do
-            local show = true
+        local country_keys = {}
+        for country in pairs(locations) do
+            country_keys[#country_keys + 1] = country
+        end
+        table.sort(country_keys)
 
-            if filter_text ~= "" then
-                show = entry.search_text:find(
-                    filter_text,
-                    1,
-                    true -- plain text search
-                ) ~= nil
+        for _, country in ipairs(country_keys) do
+            local cities = locations[country]
+            local country_label = country
+            if lang == "ar"
+                    and country_names_ar[country] then
+                country_label = country_names_ar[country]
             end
 
-            if show then
-                items[#items+1] = {
-                    text = entry.text,
-                    callback = function()
-                        local c = entry.city
-                        self:setLocation(
-                            c.name,
-                            c.name_ar,
-                            c.lat,
-                            c.lng,
-                            c.tz,
-                            entry.country
-                        )
+            local city_items = {}
 
-                        if self.location_menu then
-                            UIManager:close(
-                                self.location_menu
-                            )
-                            self.location_menu = nil
-                        end
+            for _, c in ipairs(cities) do
+                local city_label = c.name
+                if lang == "ar"
+                        and c.name_ar
+                        and c.name_ar ~= "" then
+                    city_label = c.name_ar
+                end
 
-                        if self.search_dialog then
-                            UIManager:close(
-                                self.search_dialog
+                local show = true
+                if filter_lower ~= "" then
+                    local searchable = string.lower(
+                        (c.name or "")
+                        .. " "
+                        .. (c.name_ar or "")
+                        .. " "
+                        .. country
+                        .. " "
+                        .. (country_names_ar[country] or "")
+                    )
+
+                    show = searchable:find(
+                        filter_lower,
+                        1,
+                        true
+                    ) ~= nil
+                end
+
+                if show then
+                    city_items[#city_items + 1] = {
+                        text = city_label,
+                        callback = function()
+                            self:setLocation(
+                                c.name,
+                                c.name_ar,
+                                c.lat,
+                                c.lng,
+                                c.tz,
+                                country
                             )
-                            self.search_dialog = nil
-                        end
-                    end,
-                }
+
+                            if self.location_menu then
+                                UIManager:close(
+                                    self.location_menu
+                                )
+                                self.location_menu = nil
+                            end
+                        end,
+                    }
+                end
+            end
+
+            if #city_items > 0 then
+                if filter_lower ~= "" then
+                    -- Flatten matches so all appear together
+                    for _, ci in ipairs(city_items) do
+                        ci.text =
+                            ci.text
+                            .. "  —  "
+                            .. country_label
+
+                        items[#items + 1] = ci
+                    end
+                else
+                    -- Normal nested view with count
+                    items[#items + 1] = {
+                        text = country_label
+                            .. "  ("
+                            .. #city_items
+                            .. ")",
+                        sub_item_table = city_items,
+                    }
+                end
             end
         end
 
-        if #items == 0 then
-            items[#items+1] = {
-                text = self:t("na"),
+        return items
+    end
+
+    local function openMenu(filter)
+        local built = buildMenuItems(filter)
+
+        local title
+        if filter and trimStr(filter) ~= "" then
+            title = self:t("search_results_title")
+                .. ": \""
+                .. trimStr(filter)
+                .. "\"  ("
+                .. #built
+                .. ")"
+        else
+            title = self:t("choose_from_list")
+        end
+
+        local final_items = {}
+
+        -- Search entry always first
+        final_items[#final_items + 1] = {
+            text = "🔍  " .. self:t("search_menu_label"),
+            callback = function()
+                if self.location_menu then
+                    UIManager:close(self.location_menu)
+                    self.location_menu = nil
+                end
+
+                local ok_id, InputDialog =
+                    pcall(require, "ui/widget/inputdialog")
+
+                if not ok_id or not InputDialog then
+                    -- InputDialog not available on this build.
+                    -- Just reopen the full list.
+                    openMenu("")
+                    return
+                end
+
+                local search_dlg
+
+                search_dlg = InputDialog:new{
+                    title = self:t("search_title"),
+                    input = "",
+                    input_hint = self:t("search_hint"),
+                    buttons = {{
+                        {
+                            text = self:t("cancel"),
+                            id = "close",
+                            callback = function()
+                                UIManager:close(search_dlg)
+                                -- Reopen the full unfiltered list
+                                openMenu("")
+                            end,
+                        },
+                        {
+                            text = self:t("search_button"),
+                            is_enter_default = true,
+                            callback = function()
+                                local query = ""
+
+                                local ok_input, input_text =
+                                    pcall(function()
+                                        return search_dlg
+                                            :getInputText()
+                                    end)
+
+                                if ok_input
+                                        and type(input_text)
+                                            == "string" then
+                                    query = input_text
+                                end
+
+                                UIManager:close(search_dlg)
+                                openMenu(query)
+                            end,
+                        },
+                    }},
+                }
+
+                UIManager:show(search_dlg)
+            end,
+        }
+
+        if #built == 0 then
+            final_items[#final_items + 1] = {
+                text = self:t("search_no_results"),
             }
+        else
+            for _, item in ipairs(built) do
+                final_items[#final_items + 1] = item
+            end
         end
 
         if self.location_menu then
-            UIManager:close(self.location_menu)
+            pcall(UIManager.close, UIManager, self.location_menu)
+            self.location_menu = nil
         end
 
         self.location_menu = Menu:new{
-            title = self:t("choose_from_list")
-                .. " (" .. #items .. ")",
-            item_table = items,
-            width = Screen:getWidth()
-                - Screen:scaleBySize(20),
-            height = Screen:getHeight()
-                - Screen:scaleBySize(80),
+            title = title,
+            item_table = final_items,
         }
 
         UIManager:show(self.location_menu)
     end
 
-    -- Show search input first
-    local InputDialog = require("ui/widget/inputdialog")
-
-    self.search_dialog = InputDialog:new{
-        title = self:t("choose_from_list"),
-        input = "",
-        input_hint = lang == "ar"
-            and "ابحث: القاهرة، مكة، Casablanca..."
-            or "Search: Cairo, Mecca, الرياض...",
-        buttons = {{
-            {
-                text = self:t("cancel"),
-                id = "close",
-                callback = function()
-                    UIManager:close(self.search_dialog)
-                    self.search_dialog = nil
-                end,
-            },
-            {
-                text = lang == "ar"
-                    and "عرض الكل"
-                    or "Show All",
-                callback = function()
-                    UIManager:close(self.search_dialog)
-                    self.search_dialog = nil
-                    showFilteredList("")
-                end,
-            },
-            {
-                text = lang == "ar"
-                    and "بحث"
-                    or "Search",
-                is_enter_default = true,
-                callback = function()
-                    local query =
-                        self.search_dialog:getInputText()
-
-                    UIManager:close(self.search_dialog)
-                    self.search_dialog = nil
-                    showFilteredList(query)
-                end,
-            },
-        }},
-    }
-
-    UIManager:show(self.search_dialog)
+    -- Initial open: no filter, full list
+    openMenu("")
 end
 
 function PrayerTimes:showAddLocationInput()
@@ -1282,14 +1441,27 @@ function PrayerTimes:setLocation(
         end
     end
 
+    -- Auto-enable a sensible high-latitude rule for northern
+    -- regions so users do not encounter unavailable prayer times
+    -- without any explanation.
+    local hl_auto_enabled = false
+    if type(lat) == "number"
+            and math.abs(lat) >= 48
+            and self.settings.calculation.high_latitude_rule
+                == "none" then
+        self.settings.calculation.high_latitude_rule =
+            "seventh"
+        hl_auto_enabled = true
+    end
+
     self:flushSettings()
 
     if silent then
         return
     end
 
-    -- Choose the correct name to display based on current language
     local lang = self.settings.display.language or "en"
+
     local display_name = name
     if lang == "ar"
             and name_ar
@@ -1319,6 +1491,18 @@ function PrayerTimes:setLocation(
             ),
             timeout = 3,
         })
+    end
+
+    if hl_auto_enabled then
+        UIManager:scheduleIn(0.6, function()
+            UIManager:show(InfoMessage:new{
+                text = interp(
+                    self:t("high_latitude_auto_enabled"),
+                    tostring(math.floor(math.abs(lat)))
+                ),
+                timeout = 12,
+            })
+        end)
     end
 end
 
